@@ -2,7 +2,7 @@
 
 void setup() {
   Serial.begin(115200);
-  delay(500);
+  while (!Serial) delay(10);  // wait for USB CDC host connection
   Serial.println("boot ok");
 }
 
