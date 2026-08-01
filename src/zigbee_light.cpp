@@ -17,7 +17,7 @@ static uint8_t s_last_r = 255, s_last_g = 255, s_last_b = 255;
 // Runs on the Zigbee task, not in loop(). Every field it touches is byte-sized
 // and the reader only renders frames from them, so the worst a race can do is
 // show one frame of mixed state -- not worth a mutex on the render path.
-static void on_light_change(bool state, uint8_t r, uint8_t g, uint8_t b, uint8_t level) {
+static void on_light_change_rgb(bool state, uint8_t r, uint8_t g, uint8_t b, uint8_t level) {
     s_state.on    = state;
     s_state.level = level;
     if (r != s_last_r || g != s_last_g || b != s_last_b) {
@@ -28,6 +28,15 @@ static void on_light_change(bool state, uint8_t r, uint8_t g, uint8_t b, uint8_t
     }
 }
 
+// Fires when the coordinator drives the Colour Control cluster in colour
+// temperature mode -- i.e. the white slider in Home Assistant. Routed straight
+// to the CW/WW string, which is what actually makes white in this fixture.
+static void on_light_change_temp(bool state, uint8_t level, uint16_t mireds) {
+    s_state.on    = state;
+    s_state.level = level;
+    light_state_set_cct(&s_state, mireds);
+}
+
 static void on_identify(uint16_t time) {
     log_i("Zigbee identify for %us", time);
 }
@@ -36,9 +45,27 @@ void zigbee_light_init() {
     light_state_init(&s_state);
     s_state.scene = scene_store_get_active();
 
-    s_ep.onLightChange(on_light_change);
+    s_ep.onLightChangeRgb(on_light_change_rgb);
+    s_ep.onLightChangeTemp(on_light_change_temp);
     s_ep.onIdentify(on_identify);
     s_ep.setManufacturerAndModel("Lumary", "LumaryBrainRevA");
+
+    // Advertise colour temperature alongside colour, then publish the range the
+    // fixture can actually reach. Both must happen before the stack starts, and
+    // the range setter refuses to run unless the capability bit is already set.
+    s_ep.setLightColorCapabilities(ZIGBEE_COLOR_CAPABILITY_HUE_SATURATION
+                                 | ZIGBEE_COLOR_CAPABILITY_X_Y
+                                 | ZIGBEE_COLOR_CAPABILITY_COLOR_TEMP);
+    if (!s_ep.setLightColorTemperatureRange(CCT_MIRED_COOL, CCT_MIRED_WARM)) {
+        log_e("Failed to publish colour temperature range");
+    }
+
+    // Zigbee OTA. The coordinator only offers images numbered above the running
+    // version, so ZB_FW_VERSION must match the .ota image's --file-version.
+    if (!s_ep.addOTAClient(ZB_FW_VERSION, ZB_FW_VERSION_DL, ZB_HW_VERSION,
+                           ZB_MANUFACTURER_CODE, ZB_IMAGE_TYPE)) {
+        log_e("Failed to add OTA client");
+    }
 
     Zigbee.addEndpoint(&s_ep);
 
@@ -55,6 +82,17 @@ void zigbee_light_init() {
 
 bool zigbee_light_connected() {
     return Zigbee.connected();
+}
+
+void zigbee_light_loop() {
+    // The OTA query can only be issued once we're on a network. After this first
+    // request the stack re-queries hourly on its own.
+    static bool s_ota_requested = false;
+    if (!s_ota_requested && Zigbee.connected()) {
+        s_ep.requestOTAUpdate();
+        s_ota_requested = true;
+        log_i("Zigbee joined; OTA update requested");
+    }
 }
 
 const LightState* zigbee_light_state() {

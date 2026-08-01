@@ -65,7 +65,13 @@ On ESP32-H2, the RMT peripheral conflicts with the Zigbee radio. Instead, SPI2 b
 | 2× tap up | Next scene/effect |
 | 2× tap down | Previous scene/effect |
 
-All actions use direct Zigbee binding — no hub required.
+On/off and dimming use direct Zigbee binding — no hub required.
+
+> **Not yet verified:** multi-tap events on the Inovelli are manufacturer-specific
+> and are normally sent to the coordinator rather than to a bound light, so the
+> 2× tap rows above may need a hub automation calling `zigbee_light_next_scene()` /
+> `zigbee_light_prev_scene()` rather than working over pure binding. Confirm during
+> bring-up (plan Task 6.4).
 
 ## Scene Management
 
@@ -79,26 +85,36 @@ Scenes are stored on-device in NVS (survives power cuts). Up to 16 scenes. When 
 
 ### Building an OTA image
 
+The device registers an OTA client at startup and queries for an image once it
+joins, then hourly. The coordinator only offers images numbered **above** the
+running version, so `ZB_FW_VERSION` in `src/config.h` must be bumped and passed
+as `--file-version` below — if they disagree, the update silently never appears.
+
 ```bash
 # Get the tool
 curl -L -o ota_image_tool.py \
   https://raw.githubusercontent.com/espressif/esp-zigbee-sdk/main/tools/ota_image_tool.py
 
-# Build firmware
+# Build firmware (bump ZB_FW_VERSION in src/config.h first)
 pio run -e esp32h2
 
-# Wrap as OTA image
+# Wrap as OTA image -- --file-version must equal ZB_FW_VERSION
 python3 ota_image_tool.py create \
   --manufacturer-code 0x1001 \
   --image-type 0x0001 \
-  --file-version 0x00000002 \
+  --file-version 0x01000001 \
   --stack-version 2 \
-  --header-string "LumaryZigbee v2" \
+  --header-string "LumaryZigbee" \
   .pio/build/esp32h2/firmware.bin \
-  lumary_v2.ota
+  lumary.ota
 ```
 
 ## Build & Flash
+
+> **Windows:** run `pio` from **PowerShell or cmd**, not Git Bash. This platform
+> version installs its toolchain via `idf_tools.py`, which aborts with
+> `ERROR: MSys/Mingw is not supported` under Git Bash. Building also needs
+> Windows long-path support enabled (`LongPathsEnabled = 1`).
 
 ```bash
 # Install PlatformIO CLI if needed

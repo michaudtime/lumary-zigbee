@@ -43,6 +43,10 @@ void loop() {
     static uint8_t  shown_scene  = 0xFF;   // forces a scene load on first frame
     static EffectParams scene;
 
+#if !BENCH_DEMO_MODE
+    zigbee_light_loop();
+#endif
+
     const uint32_t now = millis();
     if (now - frame_start < FRAME_INTERVAL_MS) return;
     frame_start = now;

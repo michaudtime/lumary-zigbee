@@ -12,6 +12,10 @@ void zigbee_light_init();
 // True once joined to a network.
 bool zigbee_light_connected();
 
+// Call every loop(). Handles work that can only happen after joining, such as
+// the first OTA query.
+void zigbee_light_loop();
+
 // Live state, updated from Zigbee callbacks.
 const LightState* zigbee_light_state();
 

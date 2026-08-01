@@ -49,6 +49,51 @@ void test_blue_heavy_white_reads_cool(void) {
     TEST_ASSERT_GREATER_THAN_UINT8(150, rgb_to_cct({180, 220, 255}));
 }
 
+// ── colour temperature from Zigbee (mireds) ───────────────────────────────
+// The Colour Control cluster reports colour temperature in mireds
+// (1e6 / Kelvin), so warmer light is a LARGER number. The fixture's two white
+// strings bound the range: 2700 K (370 mired) and 6500 K (154 mired).
+
+void test_warm_end_maps_to_zero(void) {
+    TEST_ASSERT_EQUAL_UINT8(0, mireds_to_cct(CCT_MIRED_WARM));      // 2700 K
+}
+
+void test_cool_end_maps_to_full(void) {
+    TEST_ASSERT_EQUAL_UINT8(255, mireds_to_cct(CCT_MIRED_COOL));    // 6500 K
+}
+
+void test_midpoint_maps_to_middle(void) {
+    const uint16_t mid = (CCT_MIRED_WARM + CCT_MIRED_COOL) / 2;
+    const uint8_t  cct = mireds_to_cct(mid);
+    TEST_ASSERT_GREATER_THAN_UINT8(115, cct);
+    TEST_ASSERT_LESS_THAN_UINT8(140, cct);
+}
+
+void test_out_of_range_mireds_clamp(void) {
+    TEST_ASSERT_EQUAL_UINT8(0,   mireds_to_cct(500));   // warmer than the WW string
+    TEST_ASSERT_EQUAL_UINT8(255, mireds_to_cct(100));   // cooler than the CW string
+}
+
+void test_setting_cct_renders_on_the_white_string(void) {
+    LightState s;
+    light_state_init(&s);
+    s.level = 200;
+    light_state_set_cct(&s, CCT_MIRED_COOL);
+    const EffectParams p = light_state_resolve(&s, &kDefaultParams[0]);
+    TEST_ASSERT_EQUAL(EFFECT_STATIC_WHITE, p.type);
+    TEST_ASSERT_EQUAL_UINT8(255, p.hue);          // fully cool
+    TEST_ASSERT_EQUAL_UINT8(200, p.brightness);
+}
+
+void test_setting_cct_leaves_scene_mode(void) {
+    LightState s;
+    light_state_init(&s);
+    light_state_set_scene(&s, 4);
+    light_state_set_cct(&s, CCT_MIRED_WARM);
+    TEST_ASSERT_EQUAL(MODE_COLOR, s.mode);        // white is a colour command
+    TEST_ASSERT_EQUAL_UINT8(0, s.sat);            // ...with no saturation
+}
+
 // ── mode switching ────────────────────────────────────────────────────────
 
 void test_starts_in_scene_mode(void) {
@@ -166,6 +211,12 @@ int main(int, char**) {
     RUN_TEST(test_neutral_white_is_mid_colour_temperature);
     RUN_TEST(test_red_heavy_white_reads_warm);
     RUN_TEST(test_blue_heavy_white_reads_cool);
+    RUN_TEST(test_warm_end_maps_to_zero);
+    RUN_TEST(test_cool_end_maps_to_full);
+    RUN_TEST(test_midpoint_maps_to_middle);
+    RUN_TEST(test_out_of_range_mireds_clamp);
+    RUN_TEST(test_setting_cct_renders_on_the_white_string);
+    RUN_TEST(test_setting_cct_leaves_scene_mode);
     RUN_TEST(test_starts_in_scene_mode);
     RUN_TEST(test_setting_a_colour_switches_to_colour_mode);
     RUN_TEST(test_recalling_a_scene_switches_back_to_scene_mode);

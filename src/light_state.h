@@ -15,6 +15,12 @@
 // CW/WW string rather than the colour ring.
 #define WHITE_SAT_THRESHOLD 32
 
+// The Colour Control cluster reports colour temperature in mireds (1e6 / K), so
+// a LARGER number is warmer. These bound the fixture's two white strings and are
+// what we advertise to the coordinator via setLightColorTemperatureRange().
+#define CCT_MIRED_WARM 370   // 2700 K -- the 27K- (WW) string
+#define CCT_MIRED_COOL 154   // 6500 K -- the 65K- (CW) string
+
 enum LightMode : uint8_t {
     MODE_SCENE,   // running a stored effect from the scene table
     MODE_COLOR,   // showing a colour set directly over Zigbee
@@ -50,8 +56,17 @@ inline HSV rgb_to_hsv(CRGB c) {
     return {uint8_t(h & 0xFF), s, mx};
 }
 
-// Zigbee 3.1.0 gives us no colour-temperature cluster, so infer warmth from the
-// colour's red/blue balance: more blue reads cooler, more red reads warmer.
+// Maps a Zigbee colour temperature (mireds) onto the CW/WW mix, where
+// 0 = fully warm and 255 = fully cool. Values outside the fixture's range clamp.
+inline uint8_t mireds_to_cct(uint16_t mireds) {
+    if (mireds >= CCT_MIRED_WARM) return 0;
+    if (mireds <= CCT_MIRED_COOL) return 255;
+    return uint8_t((uint32_t(CCT_MIRED_WARM - mireds) * 255)
+                   / (CCT_MIRED_WARM - CCT_MIRED_COOL));
+}
+
+// Fallback for coordinators that express white as an RGB colour rather than a
+// colour-temperature command: infer warmth from the red/blue balance.
 inline uint8_t rgb_to_cct(CRGB c) {
     const int cct = 128 + (int(c.b) - int(c.r)) / 2;
     return uint8_t(cct < 0 ? 0 : (cct > 255 ? 255 : cct));
@@ -78,6 +93,14 @@ inline void light_state_set_color(LightState* s, CRGB c) {
     s->hue  = h.h;
     s->sat  = h.s;
     s->cct  = rgb_to_cct(c);
+    s->mode = MODE_COLOR;
+}
+
+// A colour-temperature command is a white command: zero saturation, so resolve()
+// routes it to the CW/WW string rather than the ring.
+inline void light_state_set_cct(LightState* s, uint16_t mireds) {
+    s->sat  = 0;
+    s->cct  = mireds_to_cct(mireds);
     s->mode = MODE_COLOR;
 }
 

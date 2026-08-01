@@ -39,6 +39,13 @@
 #define ZB_MANUFACTURER_CODE  0x1001
 #define ZB_IMAGE_TYPE         0x0001
 
+// OTA. Bump ZB_FW_VERSION for every release and pass the same value to
+// ota_image_tool.py as --file-version, or the coordinator will not offer the
+// update (it only pushes images numbered higher than the running one).
+#define ZB_FW_VERSION         0x01000000
+#define ZB_FW_VERSION_DL      0x01000001
+#define ZB_HW_VERSION         0x0001      // lumary-brain rev A
+
 // ── NVS ───────────────────────────────────────────────
 #define NVS_NAMESPACE         "lm_light"
 #define NVS_KEY_FMT_VER       "fmt_ver"
