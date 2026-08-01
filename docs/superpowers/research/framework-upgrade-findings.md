@@ -2,8 +2,11 @@
 
 **Branch:** `try/framework-upgrade`
 **Date:** 2026-08-01
-**Verdict:** the upgrade **does** close both Zigbee gaps, but the build is blocked
-on this machine by a Windows setting, not by anything in our code.
+**Verdict: ✅ SUCCESS — builds clean on 3.3.11, and both Zigbee gaps close.**
+
+Firmware links and builds at **795 KB** (was 743 KB on 3.1.0). All 29 host tests
+still pass. Three environmental issues had to be cleared first; see "What blocked
+the build" below — none were code problems.
 
 ---
 
@@ -64,7 +67,25 @@ HKLM\SYSTEM\CurrentControlSet\Control\FileSystem\LongPathsEnabled = 0
 The newer package bundles Matter/connectedhomeip headers for every chip, and some
 of those paths exceed the limit. Nothing to do with the ESP32-H2 or our sources.
 
-## Two ways forward
+### Resolved: three blockers, in order
+
+1. **Windows MAX_PATH.** Fixed by setting `LongPathsEnabled = 1` (done, needs no
+   further action).
+2. **`idf_tools.py` refuses to run under MSys/Mingw.** The 55.x platform installs
+   its toolchain via `idf_tools.py`, which bails out when it detects Git Bash:
+   `ERROR: MSys/Mingw is not supported`. **Run `pio` from PowerShell or cmd on this
+   platform version** — the 53.x platform did not have this dependency, which is why
+   Git Bash worked before.
+3. **Zigbee library names changed in IDF 5.5.** Underscores became dots and
+   `zboss_port` gained a `.native` suffix:
+
+   | 53.x (IDF 5.3) | 55.x (IDF 5.5) |
+   |---|---|
+   | `-lesp_zb_api_zczr` | `-lesp_zb_api.zczr` |
+   | `-lzboss_stack.zczr` | `-lzboss_stack.zczr` (unchanged) |
+   | `-lzboss_port` | `-lzboss_port.native` |
+
+## Two ways forward (historical — option A was taken)
 
 **A. Enable Windows long paths** (recommended; one-time, helps every future project)
 
