@@ -1,5 +1,7 @@
 .pio/
 build/
+.history/
+*.kicad_prl
 *.ota
 *.bin
 *.obj
