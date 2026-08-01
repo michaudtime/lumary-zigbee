@@ -71,6 +71,32 @@ issues. On the new board we **move CW/WW off the strapping pins**.
 - **Verify (Task 2.6/layout):** GPIO4, GPIO5, GPIO11 are broken out on MINI-1 and free of analog-only limits.
 - **Firmware (Phase 5, Task 5.1):** `PIN_CW_PWM` 2→**4**, `PIN_WW_PWM` 3→**5**; `PIN_SK6812_DATA` stays 11.
 
+## As-built trace widths (rev A) — found after routing
+
+KiCad discarded the `Power` net class when it rewrote `lumary-brain.kicad_pro` on
+first open, so **every net on rev A routed at the 0.2 mm Default**, not the 0.5 mm
+intended for the power nets. The Gerbers were generated from that board, so this is
+what shipped. The class has since been restored in the project file for rev B.
+
+IPC-2221, external layer, 1 oz copper: a 0.2 mm trace carries **0.74 A** at a 10 °C
+rise (1.01 A at 20 °C).
+
+| Path | Current | Rise | Drop | Verdict |
+|---|---|---|---|---|
+| `+36V`, `CW_RET`, `WW_RET` (white string) | 380 mA | 2.2 °C | 37 mV | **fine** — the CC driver fixes this current, it cannot grow |
+| `+4V7_IN` at `MAX_BRIGHTNESS` 24 (ring 0.35 A + module 0.2 A) | 550 mA | 5.0 °C | 60 mV | **fine** |
+| `+4V7_IN` if brightness were raised to 255 | ~1.5 A | **49 °C** | 164 mV | **not acceptable** |
+
+**Consequence for firmware:** `MAX_BRIGHTNESS` in `main.cpp` is a *hardware* limit on
+rev A, not just a USB-bench convenience. The ceiling that keeps `+4V7_IN` inside its
+10 °C rise is about **37**; it is currently set to 24, which leaves comfortable margin.
+Do not raise it toward 255 on a rev A board.
+
+**Rev B fix:** widen `+4V7`/`+4V7_IN` to 0.5 mm (or pour them). The white path can stay
+at 0.2 mm — 380 mA is fixed by the constant-current driver and barely warms the copper.
+
+---
+
 ## Open numeric items (not blocking Phase 1)
 - Measure the `+4V7` rail's real current limit → set the firmware brightness cap precisely (risk R3).
 - Confirm final MOSFET part meets ≥60 V / logic-level / ≥0.5 A and is JLCPCB-stocked (Task 1.3 verify).

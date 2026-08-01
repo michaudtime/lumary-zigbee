@@ -9,9 +9,12 @@
 
 static CRGB leds[RING_NUM_LEDS];
 
-// Hard brightness ceiling. 62 RGB pixels at full white draw ~3.7 A, far past
-// what USB or a bench supply can deliver. Keep this low until the board runs
-// from the fixture's own 4.7 V rail, then raise toward 255 (plan Task 6.2).
+// Hard brightness ceiling -- a HARDWARE limit on rev A, not just a bench guard.
+// The +4V7 traces routed at 0.2 mm (KiCad dropped the Power net class before
+// routing), which carries ~0.74 A at a 10 C rise. Ring + module at this setting
+// draws ~0.55 A; at full brightness it would be ~1.5 A and cook the trace
+// (~49 C rise). The safe ceiling is about 37. See hardware/calcs.md.
+// Do NOT raise this toward 255 on a rev A board.
 #define MAX_BRIGHTNESS 24
 
 // Set to 1 to cycle every effect on a timer with no Zigbee network, for
