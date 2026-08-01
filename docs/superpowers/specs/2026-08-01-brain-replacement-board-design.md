@@ -106,13 +106,17 @@ Everything downstream reproduces the stock board's behaviour for the LED module.
 - **Input protection:** reverse-polarity (series P-FET or Schottky) + TVS + bulk cap on the
   low-voltage input. Respect creepage/clearance around the 36 V net.
 
-### 4.2 Inner white output (tunable CCT)
-- Two **low-side constant-current sinks** on `CW-`/`WW-`, PWM-dimmed from the module's LEDC
-  channels. Brightness = total on-time; CCT = cool:warm ratio.
-- **Default:** clone the stock **linear CC** (`HT7308`-class) at the measured setpoint (faithful
-  behaviour). **Alternative** (only if thermals demand): MOSFET + sense-resistor switching sink.
-- **Ratings:** low-side devices rated **≥60 V** (CC source swings to 35.8 V compliance during
-  PWM off-time). Thermal copper on sinks (small, headroom is near-zero).
+### 4.2 Inner white output (tunable CCT)  — REVISED to MOSFET switches
+The external driver is confirmed **constant-current** (380 mA), so the board only **gates** each
+channel; it does not regulate current (the stock `HT7308` linear regs existed for the stock board's
+*analog* dimming — we dim digitally by PWM).
+- Two **logic-level N-MOSFET low-side switches** on `CW-`/`WW-`, PWM'd from the module's LEDC
+  channels. Brightness = duty; CCT = cool:warm duty ratio. No sense resistors.
+- **+ 36 V bulk cap** (10 µF/50 V) for switch-on inrush (mirrors the stock 4.7 µF/50 V caps).
+- **Ratings:** MOSFET Vds **≥60 V** (CC source rails to 35.8 V compliance when off), logic-level,
+  Id ≥ 0.5 A. On-state loss ≈ I²·Rds(on) ≈ 1.5 mW — negligible, no thermal concern.
+- **Firmware:** may need `PWM_FREQ_HZ` lowered to ~0.5–2 kHz so the CC driver tracks PWM cleanly
+  (bring-up tuning, Phase 6).
 
 ### 4.3 Outer ring output (addressable)
 - Module data GPIO (firmware's SPI2-MOSI NZR encoding) → **3.3 V→4.7 V level buffer**

@@ -29,19 +29,28 @@ Rails: `+36V` = 36.63 V constant-current (380 mA), `+4V7` = 4.7 V logic/ring, `G
 
 ## Task 1.2 — White-driver topology decision
 
-**Gate rule:** dissipation ≤ 0.5 W → linear CC (clone HT7308); > 0.5 W → MOSFET + sense switching sink.
+**REVISED (approved):** the external driver is a confirmed **constant-current** source (380 mA),
+so the board does **not** need to regulate current — it only needs to **gate** each channel.
+The stock board used linear CC (`HT7308`) because it did *analog* dimming via the `A08G` op-amp;
+we dim **digitally by PWM from the ESP32**, so simple switches suffice.
 
-- P0.5 dissipation = **0.23 W ≤ 0.5 W → CHOSEN: clone the stock HT7308-class linear constant-current low-side sinks.**
-- Two channels: `CW-` (cool, GPIO2 PWM) and `WW-` (warm, GPIO3 PWM), common anode at `+36V`.
-- **CC limit set ≈ 420 mA** — deliberately *above* the driver's 380 mA so the board never limits below the driver (full brightness preserved). The CC function then only acts as protection if voltage headroom ever appears (e.g. a failed parallel bank).
-- Brightness = PWM duty on both sinks; color temperature = cool:warm duty ratio.
-- **Ratings:** low-side device / regulator must withstand the 35.8 V CC compliance → spec **≥ 60 V**.
-- **To confirm at BOM step (Task 1.3):** HT7308 V_ref from datasheet → sense resistor `R_sense = V_ref / 0.42 A`. (Stock board photos hinted `R680` = 0.68 Ω; verify against datasheet math.)
+- **CHOSEN: 2× logic-level N-MOSFET low-side switches** (`Q1`=CW/GPIO2, `Q2`=WW/GPIO3), common
+  anode at `+36V`. No current-regulation, no sense resistors — the driver sets the 380 mA.
+- Brightness = PWM duty on both switches; color temperature = cool:warm duty ratio.
+- **+ 36 V bulk cap `C1` (10 µF/50 V):** absorbs turn-on inrush when a channel switches (mirrors
+  the stock 4.7 µF/50 V caps). When both channels are off, the CC driver rails to its 35.8 V
+  compliance — this cap holds the rail, and the MOSFETs must block it.
+- **Ratings:** MOSFET Vds must withstand the 35.8 V compliance → spec **≥ 60 V**, logic-level
+  (fully on at 3.3 V gate), Id ≥ 0.5 A (carries the full 380 mA when on).
+- Thermal: MOSFET on-state loss = I²·Rds(on) ≈ 0.38² × ~0.1 Ω ≈ **1.5 mW** — negligible.
 
-**VERDICT:** low-side device Vds ≥ 60 V required; topology = linear CC clone. PASS.
+**Firmware note (Phase 6):** a CC driver may not track 20 kHz output PWM cleanly; plan to lower
+`PWM_FREQ_HZ` to ~500 Hz–2 kHz during bring-up and verify flicker-free low-end dimming.
+
+**VERDICT:** topology = MOSFET low-side switches + 36 V bulk cap; devices ≥ 60 V logic-level. PASS.
 
 ---
 
 ## Open numeric items (not blocking Phase 1)
 - Measure the `+4V7` rail's real current limit → set the firmware brightness cap precisely (risk R3).
-- Confirm HT7308 V_ref (datasheet) → final sense-resistor value (Task 1.3).
+- Confirm final MOSFET part meets ≥60 V / logic-level / ≥0.5 A and is JLCPCB-stocked (Task 1.3 verify).
