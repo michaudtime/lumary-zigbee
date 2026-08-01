@@ -74,12 +74,17 @@ Wires: black=`LED+` (anode), white=`65K-` (cool return), yellow=`27K-` (warm ret
 
 ---
 
-## P0.6 — Mechanical  (Task 0.5)
-600 dpi flatbed scan (or straight-down photo) with a ruler, saved next to this file.
+## P0.6 — Mechanical  (Task 0.5)  — FINAL (no scan; using envelope + photo assumptions)
+No scan will be provided. Design to the measured envelope; outline = rounded rectangle.
 
-- board outline L×W = `___` mm
-- mounting holes: diameter = `___` mm, positions = `___`
-- tallest component height (max envelope) = `___` mm
-- MINI-1 (~2.4 mm) + chosen connectors fit under envelope? = `___`
-- antenna keepout region relative to fixture opening = `___`
-- scan file = `___`
+- board outline L×W = **63.3 mm × 31.3 mm** ✅ → KiCad outline = rounded rectangle at these dims,
+  corner radius ~5 mm (stadium-ish ends, per photos). Design ~0.3–0.5 mm inside nominal for fit slack.
+- tallest component height (max envelope) = **6.7 mm** ✅
+- fit check = **PASS, huge margin** (our tallest part USB-C ~3.2 mm; ceramic caps only). ✅
+- mounting holes = **ASSUMED NONE** — stock board appears retained by the housing + harnesses
+  (no screw holes visible in photos). ⚠️ Correct if the fixture actually screws the board down.
+- connector placement (from photos) = **power-in (J1) at one short end, CN1 (J2) at the other short
+  end**, matching stock harness exits. J2 pin order = stock label order V+/CW-/WW-/5V+/GND/DIM/(NC);
+  align pin 1 to the housing from a CN1 photo at layout time. ⚠️ Confirm orientation before fab.
+- antenna keepout = MINI-1 PCB antenna at a short **end**, toward the fixture opening; stock 2.4 GHz
+  module ran from this area, so RF is low-risk. Keep copper clear under the antenna on all layers.
