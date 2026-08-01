@@ -18,22 +18,25 @@ Plan: `docs/superpowers/plans/2026-08-01-brain-replacement-board.md`
 Measure pitch with calipers → JST family: 1.0 mm=SH, 1.25 mm=GH, 1.5 mm=ZH, 2.0 mm=PH.
 
 - Power-in:  pins = `___`   pitch = `___` mm   JST family = `___`   pin order (1..N) = `___`
-- CN1:       pins = `___`   pitch = `___` mm   JST family = `___`   pin order (1..N) = `___`
+- CN1:       pins = **7 (6 populated, 1 empty)**   pitch = **1.25 mm**   JST family = **Molex PicoBlade** (friction-only fit rules out JST-GH's latch)   physical pin order (1..7) = `___ (TODO from scan)`
 
 ---
 
-## P0.3 — CN1 pinout  (Task 0.2)
-DMM continuity, board unpowered. Confirm each pin against silkscreen (`5V+ / WW- / GND / DIM / CW- / +A / -A`).
+## P0.3 — CN1 pinout  (Task 0.2)  — DONE (physical 1..7 order still TODO)
+7-position PicoBlade, 6 wires populated, split 3 (inner white) + 3 (outer addressable ring):
 
-- pin1 = `___`
-- pin2 = `___`
-- pin3 = `___`
-- pin4 = `___`
-- pin5 = `___`
-- pin6 = `___`
-- pin7 = `___`
-- `+A` carries = `___`  (expected: ring DATA)
-- `-A` carries = `___`  (expected: ring GND/return)
+| Label | Wire | Role | Board net |
+|---|---|---|---|
+| `V+`  | Black  | Inner white-string anode (36 V, → strip `LED+`) | `+36V` |
+| `CW-` | White  | Cool-white return (→ strip `65K-`) | low-side CC sink CW |
+| `WW-` | Yellow | Warm-white return (→ strip `27K-`) | low-side CC sink WW |
+| `5V+` | Red    | Outer ring power (4.7 V) | `+4V7` |
+| `GND` | Green  | Outer ring ground | `GND` |
+| `DIM` | Blue   | **Outer ring DATA** (single-wire addressable; "DIM" is vendor's generic name) | level-shifted data out |
+| (7th) | none   | unpopulated | — |
+
+- Still TODO: physical position of each label on the 7-way housing (which end is pin 1, where the empty slot is) — read off the P0.6 scan.
+- Confirmation logic: a color *gradient* over a single control wire ⇒ addressable, so `DIM` = data, not analog dim.
 
 ---
 
