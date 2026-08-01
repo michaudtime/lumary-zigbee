@@ -51,6 +51,26 @@ we dim **digitally by PWM from the ESP32**, so simple switches suffice.
 
 ---
 
+## Task 1.4 — ESP32-H2 pin assignments
+
+ESP32-H2 **strapping pins = GPIO2, GPIO3, GPIO8, GPIO9, GPIO25**; **USB = GPIO26 (D−), GPIO27 (D+)**.
+
+⚠️ **Conflict found:** the current firmware drives **CW=GPIO2** and **WW=GPIO3** — both are
+**strapping pins**. Our MOSFET gate pulldowns would hold them low at reset, risking boot-mode
+issues. On the new board we **move CW/WW off the strapping pins**.
+
+| Function | Old (Super Mini fw) | New board | Note |
+|---|---|---|---|
+| RGBIC ring data | GPIO11 | **GPIO11** | OK (not strapping); SPI2-MOSI via GPIO matrix |
+| CW PWM (Q1 gate) | GPIO2 ⚠️ | **GPIO4** | moved off strapping |
+| WW PWM (Q2 gate) | GPIO3 ⚠️ | **GPIO5** | moved off strapping |
+| BOOT button | GPIO9 | **GPIO9** | strapping = download-mode select (correct use) |
+| Reset | — | **EN** pin | dedicated |
+| USB D− / D+ | — | **GPIO26 / GPIO27** | native USB-Serial-JTAG |
+
+- **Verify (Task 2.6/layout):** GPIO4, GPIO5, GPIO11 are broken out on MINI-1 and free of analog-only limits.
+- **Firmware (Phase 5, Task 5.1):** `PIN_CW_PWM` 2→**4**, `PIN_WW_PWM` 3→**5**; `PIN_SK6812_DATA` stays 11.
+
 ## Open numeric items (not blocking Phase 1)
 - Measure the `+4V7` rail's real current limit → set the firmware brightness cap precisely (risk R3).
 - Confirm final MOSFET part meets ≥60 V / logic-level / ≥0.5 A and is JLCPCB-stocked (Task 1.3 verify).
