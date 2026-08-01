@@ -267,15 +267,26 @@ git commit -m "docs: phase 0 measurement template"
 
 ---
 
-## Phase 5 — Firmware pin remap
+## Phase 5 — Firmware updates
+
+> Phase 0 (P0.4) found the outer ring is **62 pixels of 24-bit RGB** (RGBIC), not the
+> 36 RGBW the firmware assumes. This phase covers the pin remap **and** that conversion.
 
 ### Task 5.1: Update config.h for the new board — [CLAUDE]
 
 **Files:** Modify `src/config.h`
 
-- [ ] **Step 1:** Update the pin `#define`s to the Task 1.4 final assignments (only if any changed from the current GPIO11/2/3/9). Add a comment block noting the target board = `lumary-brain rev A`.
-- [ ] **Step 2: Verify** by building: `pio run -e esp32h2`. Expected: compiles clean.
-- [ ] **Step 3: Commit** `src/config.h`.
+- [ ] **Step 1:** Update the pin `#define`s to the Task 1.4 final assignments (only if any changed from the current GPIO11/2/3/9). Add a comment block noting target board = `lumary-brain rev A`.
+- [ ] **Step 2:** Change `SK6812_NUM_LEDS` from `36` to **`62`**, and recompute `SK6812_SPI_BUF_SIZE` for **24-bit** pixels: `62 × 24 × 3 SPI-bits/bit = 4464 bits = 558 bytes` + ~50 reset bytes → set to `608`.
+- [ ] **Step 3: Verify** by building: `pio run -e esp32h2`. Expected: compiles clean. Commit.
+
+### Task 5.2: Convert the outer-ring buffer from RGBW to RGB — [CLAUDE]
+
+**Files:** Modify `src/color.h`, `src/led_driver.cpp`, `src/effects.cpp`, `src/main.cpp`
+
+- [ ] **Step 1:** In `led_driver_show()`, change the per-pixel encoding from 32-bit GRBW to **24-bit** color order (default GRB; confirm on bring-up per P0.4). The inner CW/WW white stays on its separate LEDC PWM path — do not fold white into the pixel stream.
+- [ ] **Step 2:** Switch the ring buffer type used in `main.cpp`/`effects.cpp` from `CRGBW` to a 24-bit `CRGB` (drop the W byte). Keep effect math the same; only the output packing changes.
+- [ ] **Step 3: Verify** build `pio run -e esp32h2` compiles clean. Full colour-order + pixel-count correctness is verified on hardware in Task 6.2. Commit.
 
 ---
 
