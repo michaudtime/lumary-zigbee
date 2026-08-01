@@ -68,22 +68,24 @@ COMPONENTS = {
 #   BOTTOM-LEFT  (x 14..24, y>17.5) buttons + USB ESD + CC (near J3), module bulk caps
 #   BOTTOM-RIGHT (x 39..51, y>17.5) white MOSFET switches + ring buffer (near J2)
 POS = {
- # fixed anchors (courtyards: U1 x10..53.2/y0..14.4; J1 x6.1..14.8/y17.5..26.5;
- #                J2 x52.4..56.7/y14.5..26.0; J3 x26.2..37.0/y22.2..31.7)
- "U1":(31.6, 8.5, 0), "J1":(8,24,90), "J2":(55,24,90), "J3":(31.6,27.5,0),
- # left column (x<8, above/beside J1): power chain, top to bottom
- "U2":(5, 2.6, 90), "Q3":(5, 7.2, 90), "D1":(5, 10.7, 0), "D2":(5, 13.4, 0),
- "C3":(5, 16.1, 0), "C4":(4.2, 18.3, 0), "R9":(4.2, 20.3, 0), "D3":(4.7, 29.3, 0),
- # under-module band (x26..37, y15..21, above J3): module bulk + EN support
- "C5":(28, 15.9, 0), "C6":(30.5, 15.9, 0), "R6":(33, 15.9, 0), "C8":(35.5, 15.9, 0),
- # bottom-left (between J1 and J3): the two bench buttons
- "SW1":(20, 18.8, 0), "SW2":(20, 25.3, 0),
- # right of J3, below right band: USB ESD + CC pulldowns (hug the USB-C)
- "U4":(39.5, 28.5, 90), "R7":(43, 28.5, 0), "R8":(45.5, 28.5, 0),
- # bottom-right band: white switches + ring buffer (near J2)
- "Q1":(40, 17.6, 90), "Q2":(44, 17.6, 90), "C1":(48.5, 17.6, 0),
- "R1":(40, 20.5, 0), "R2":(44, 20.5, 0), "R3":(47.5, 20.5, 0), "R4":(50.5, 20.5, 0),
- "U3":(40, 23.5, 90), "R5":(44, 23.5, 0), "C7":(47, 23.5, 0), "C2":(50, 23.5, 0),
+ # === USER'S LAYOUT (adopted as baseline, 2026-08-01) ===
+ # module top-left, antenna firing off the LEFT edge (keepout x<5.8 stays empty);
+ # J1 power lower-left, J2 CN1 right edge, J3 USB bottom-center.
+ "U1":(11.4, 7.1, 90), "J1":(13,24,-90), "J2":(59.5,19,90), "J3":(30.8,26.4,0),
+ "Q1":(38, 17.9, 90), "Q2":(44, 18.1, 90), "Q3":(50.5, 18, 90),
+ "D1":(43.4, 4.5, 0), "D2":(43.4, 8.5, 0), "D3":(11, 18, 0),
+ "C1":(53.5, 26, 0),
+ "SW1":(20.5, 22, 0), "SW2":(20.5, 28, 0),
+ "U2":(38, 13.1, 90), "U3":(44, 13.1, 90),
+ "R1":(40, 21, 0), "R2":(40, 22.5, 0), "R3":(45, 21, 0), "R4":(47.5, 21, 0),
+ "R5":(42.5, 21, 0), "R9":(47.5, 24, 0),
+ # === SUPPORT PARTS RELOCATED TO THEIR OWNERS (locality = function) ===
+ "C6":(9, 15.3, 0),   "C5":(11.8, 15.3, 0),          # module 100n+10u at 3V3 pad (9.1,13)
+ "U4":(28.5, 19.2, 0), "R7":(32, 19.5, 0), "R8":(34.5, 19.5, 0),  # USB ESD+CC at J3 pads
+ "C3":(34.6, 15.9, 0), "C2":(34.8, 12.5, 0),          # LDO in/out caps at U2 pins
+ "C7":(46.5, 10.5, 0),                                 # buffer cap at U3
+ "C4":(50.5, 21.5, 0),                                 # +4V7 bulk at Q3/J2 side
+ "R6":(16, 15.2, 0),  "C8":(18.5, 15.2, 0),           # EN pullup+cap near module EN pad
 }
 
 # ---- netlist: (ref, pad) -> net ------------------------------------------
