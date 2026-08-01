@@ -3,38 +3,74 @@
 #include "led_driver.h"
 #include "effects.h"
 #include "effect_params.h"
+#include "light_state.h"
+#include "scene_store.h"
+#include "zigbee_light.h"
 
 static CRGB leds[RING_NUM_LEDS];
 
-// Cap brightness during USB bench testing. 62 RGB pixels at full white would
-// draw ~3.7 A (62 × 3 × ~20 mA); this keeps the ring near ~0.35 A so USB can't
-// brown out the board. Raise once the fixture's own 4.7 V rail is supplying it.
-#define BENCH_BRIGHTNESS 24
+// Hard brightness ceiling. 62 RGB pixels at full white draw ~3.7 A, far past
+// what USB or a bench supply can deliver. Keep this low until the board runs
+// from the fixture's own 4.7 V rail, then raise toward 255 (plan Task 6.2).
+#define MAX_BRIGHTNESS 24
+
+// Set to 1 to cycle every effect on a timer with no Zigbee network, for
+// bench-testing the LED path over USB before the light is joined.
+#define BENCH_DEMO_MODE 0
+
+#define FRAME_INTERVAL_MS 16
 
 void setup() {
-  Serial.begin(115200);
-  while (!Serial) delay(10);
-  Serial.println("boot ok");
-  led_driver_init();
-  Serial.println("LED driver init ok");
+    Serial.begin(115200);
+    while (!Serial) delay(10);
+    Serial.println("boot ok");
+
+    scene_store_init();
+    led_driver_init();
+    Serial.println("LED driver init ok");
+
+#if !BENCH_DEMO_MODE
+    zigbee_light_init();
+#endif
 }
 
 void loop() {
-  static uint8_t  effect_idx   = 0;
-  static uint32_t effect_start = 0;
-  static uint32_t frame_start  = 0;
+    static uint32_t frame_start  = 0;
+    static uint32_t effect_start = 0;
+    static uint8_t  shown_scene  = 0xFF;   // forces a scene load on first frame
+    static EffectParams scene;
 
-  uint32_t now = millis();
-  if (now - effect_start > 5000) {
-    effect_idx = (effect_idx + 1) % EFFECT_COUNT;
-    effect_start = now;
-    Serial.printf("Effect: %s\n", kEffects[effect_idx].name);
-  }
-  if (now - frame_start >= 16) {
+    const uint32_t now = millis();
+    if (now - frame_start < FRAME_INTERVAL_MS) return;
     frame_start = now;
-    EffectParams p = kDefaultParams[effect_idx];
-    p.brightness   = BENCH_BRIGHTNESS;  // USB-safe current limit
-    kEffects[effect_idx].fn(now - effect_start, p, leds, true);
+
+#if BENCH_DEMO_MODE
+    static uint8_t demo_idx = 0;
+    if (now - effect_start > 5000) {
+        demo_idx     = (demo_idx + 1) % EFFECT_COUNT;
+        effect_start = now;
+        Serial.printf("Effect: %s\n", kEffects[demo_idx].name);
+    }
+    EffectParams p = kDefaultParams[demo_idx];
+    const bool on  = true;
+#else
+    const LightState* s = zigbee_light_state();
+
+    // Scene params live in NVS; only re-read them when the scene actually
+    // changes, and restart the animation clock so effects begin from frame 0.
+    if (s->scene != shown_scene) {
+        shown_scene  = s->scene;
+        effect_start = now;
+        scene_store_load(shown_scene, &scene);
+    }
+
+    EffectParams p = light_state_resolve(s, &scene);
+    const bool on  = s->on;
+#endif
+
+    if (p.brightness > MAX_BRIGHTNESS) p.brightness = MAX_BRIGHTNESS;
+    if (p.type >= EFFECT_COUNT) p.type = EFFECT_STATIC_WHITE;   // NVS corruption guard
+
+    kEffects[p.type].fn(now - effect_start, p, leds, on);
     led_driver_show(leds, RING_NUM_LEDS);
-  }
 }
