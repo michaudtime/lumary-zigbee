@@ -203,7 +203,74 @@ def main():
         seg.SetLayer(pcbnew.Edge_Cuts); seg.SetWidth(mm(0.15))
         board.Add(seg)
 
+    # no-fill keepouts around NPTH mounting holes (J3 USB-C pegs) so zone fill
+    # honours hole clearance
+    for f in fps.values():
+        for pad in f.Pads():
+            if pad.GetAttribute() == pcbnew.PAD_ATTRIB_NPTH:
+                r = max(pad.GetDrillSize().x, pad.GetDrillSize().y)/2 + mm(0.35)
+                ka = pcbnew.ZONE(board)
+                ka.SetIsRuleArea(True)
+                ka.SetDoNotAllowZoneFills(True)
+                ka.SetDoNotAllowTracks(False); ka.SetDoNotAllowVias(False)
+                ka.SetDoNotAllowPads(False);   ka.SetDoNotAllowFootprints(False)
+                ls = pcbnew.LSET(); [ls.AddLayer(l) for l in
+                     (pcbnew.F_Cu, pcbnew.In1_Cu, pcbnew.In2_Cu, pcbnew.B_Cu)]
+                ka.SetLayerSet(ls)
+                o = ka.Outline().NewOutline()
+                c = pad.GetPosition()
+                for dx,dy in ((-r,-r),(r,-r),(r,r),(-r,r)):
+                    ka.Outline().Append(int(c.x+dx), int(c.y+dy), o)
+                board.Add(ka)
+
+    # GND zones: pours on F/B + solid planes on both inner layers, inset from the
+    # board edge. The module's antenna rule-area keeps copper out of the antenna region.
+    INSET = 0.6
+    for layer in (pcbnew.F_Cu, pcbnew.In1_Cu, pcbnew.In2_Cu, pcbnew.B_Cu):
+        z = pcbnew.ZONE(board)
+        z.SetLayer(layer)
+        z.SetNet(nets["GND"])
+        o = z.Outline().NewOutline()
+        for cx,cy in ((INSET,INSET),(BOARD_W-INSET,INSET),
+                      (BOARD_W-INSET,BOARD_H-INSET),(INSET,BOARD_H-INSET)):
+            z.Outline().Append(mm(cx), mm(cy), o)
+        z.SetLocalClearance(mm(0.3))
+        z.SetMinThickness(mm(0.25))
+        # solid connections: board is machine-reflowed (JLC PCBA), thermal reliefs
+        # only matter for hand soldering and they starve on this dense a board
+        z.SetPadConnection(pcbnew.ZONE_CONNECTION_FULL)
+        z.SetZoneName(f"GND_{pcbnew.LayerName(layer)}")
+        board.Add(z)
+    filler = pcbnew.ZONE_FILLER(board)
+    filler.Fill(board.Zones())
+
     board.Save(OUT)
+
+    # project file with net classes (KiCad reads it next to the .kicad_pcb)
+    import json
+    pro = os.path.join(HERE, "lumary-brain.kicad_pro")
+    def nc(name, tw, via, vdrill, clr):
+        return {"name":name,"clearance":clr,"track_width":tw,
+                "via_diameter":via,"via_drill":vdrill,
+                "bus_width":12,"diff_pair_gap":0.25,"diff_pair_via_gap":0.25,
+                "diff_pair_width":0.2,"line_style":0,"microvia_diameter":0.3,
+                "microvia_drill":0.1,"wire_width":6,
+                "pcb_color":"rgba(0, 0, 0, 0.000)","schematic_color":"rgba(0, 0, 0, 0.000)"}
+    POWER_NETS = ["+36V","+4V7","+4V7_IN","+3V3","VBUS","LDO_IN","CW_RET","WW_RET"]
+    data = {
+      "board": {"design_settings": {"defaults": {}}},
+      "meta": {"filename": "lumary-brain.kicad_pro", "version": 3},
+      "net_settings": {
+        "classes": [nc("Default",0.25,0.6,0.3,0.2), nc("Power",0.5,0.8,0.4,0.2)],
+        "meta": {"version": 4},
+        "net_colors": None,
+        "netclass_assignments": None,
+        "netclass_patterns": [{"netclass":"Power","pattern":p} for p in POWER_NETS],
+      },
+    }
+    with open(pro,"w",encoding="utf-8") as fh:
+        json.dump(data, fh, indent=2)
+    print(f"    wrote {pro}")
     # summary
     ratsnest_pads = sum(1 for f in fps.values() for p in f.Pads() if p.GetNetCode()>0)
     print(f"OK  components={len(fps)}  nets={len(nets)}  connected_pads={ratsnest_pads}  missing={len(missing)}")
