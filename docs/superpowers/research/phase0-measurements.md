@@ -17,7 +17,7 @@ Plan: `docs/superpowers/plans/2026-08-01-brain-replacement-board.md`
 ## P0.1 — Connectors  (Task 0.1)
 Measure pitch with calipers → JST family: 1.0 mm=SH, 1.25 mm=GH, 1.5 mm=ZH, 2.0 mm=PH.
 
-- Power-in:  pins = `___`   pitch = `___` mm   JST family = `___`   pin order (1..N) = `___`
+- Power-in:  **soldered on stock board (no existing connector).** New board = **3-pin JST-PH 2.0 mm (polarized) + parallel solder pads** (DECIDED — both options on the footprint; user has PH stock). Wires: GND / 36 V / 4.7 V. Pin order on our connector is our choice → keep GND on an end pin, key so 36 V can't swap with 4.7 V.
 - CN1:       pins = **7 (6 populated, 1 empty)**   pitch = **1.25 mm**   JST family = **Molex PicoBlade** (friction-only fit rules out JST-GH's latch)   physical pin order (1..7) = `___ (TODO from scan)`
 
 ---
