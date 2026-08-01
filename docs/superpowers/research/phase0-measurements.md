@@ -53,14 +53,22 @@ Measure pitch with calipers → JST family: 1.0 mm=SH, 1.25 mm=GH, 1.5 mm=ZH, 2.
 
 ---
 
-## P0.5 — White string  (Task 0.4)
-HT7308 datasheet V_ref ≈ `___` V (confirm). I_set = V_ref / R_sense.
+## P0.5 — White string  (Task 0.4)  — DONE
+Strip `8C18W-12C4B-2835X2-588×7.5mm V1.0`; 96 LEDs total, cool/warm interleaved.
+Wires: black=`LED+` (anode), white=`65K-` (cool return), yellow=`27K-` (warm return).
 
-- HT7308 sense-resistor marking = `___`  → R_sense = `___` Ω  → **I_set = `___` mA**
-- CW (65K, cool) series LED count = `___`   Vf_total_CW ≈ count×3.0 = `___` V   headroom = 36.63 − Vf = `___` V
-- WW (27K, warm) series LED count = `___`   Vf_total_WW ≈ count×3.0 = `___` V   headroom = `___` V
-- **Max sink dissipation = headroom × 0.38 A = `___` W**
-- Decision (Task 1.2 gate): ≤0.5 W → linear CC (clone HT7308); >0.5 W → MOSFET+sense switching sink → chosen = `___`
+- **Topology: 12 series × 4 parallel banks PER COLOR** (`12C4B`); per-bank ballast resistors
+  balance the 4 parallels. 48 cool + 48 warm = 96 ✓
+- Per-color full current = 380 mA (driver total) → ~95 mA/bank across 4 banks; **sink carries 380 mA**
+- Vf_string ≈ 12 × 3.05 V ≈ **36 V** ≈ rail (36.63 V) → **headroom ≈ 0.6 V**
+- **Max sink dissipation ≈ 0.6 V × 0.38 A ≈ 0.23 W per channel** (only one color full at a time)
+- Driver confirmed **constant-current** (rails to 36.63 V open = compliance; regulates 380 mA loaded).
+  Board **steers + PWMs**, does not source current.
+- **DECISION (Task 1.2 gate): 0.23 W ≤ 0.5 W → clone HT7308 linear CC low-side sinks.**
+  Set CC limit **~420 mA** (above the driver's 380 mA) so the board never limits below the driver
+  (full brightness preserved; CC engages only as protection if headroom ever appears).
+- Optional fidelity: exact stock HT7308 sense-R (photos hinted `R680`=0.68 Ω) — nice-to-have, not
+  blocking, since we set our own ~420 mA limit. Confirm HT7308 V_ref from datasheet at BOM step.
 
 ---
 
