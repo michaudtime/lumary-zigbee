@@ -40,13 +40,16 @@ Measure pitch with calipers → JST family: 1.0 mm=SH, 1.25 mm=GH, 1.5 mm=ZH, 2.
 
 ---
 
-## P0.4 — Outer (addressable) ring  (Task 0.3)
-Read the marking on one ring pixel under magnification.
-
-- pixel chip marking = `___`   (expected SK6812)
-- pixel count = `___`          (firmware assumes 36)
-- ring supply voltage = `___` V
-- data protocol / notes = `___`
+## P0.4 — Outer (addressable) ring  (Task 0.3)  — DONE
+- strip marking = **UT-08-ZC03-01-5V3535RGBIC-3W-1C62B-628x8mm V1.2 20241120**
+- type = **5 V, 3535-package, addressable RGBIC** (per-pixel IC); pads **VCC / DIN / GND** (3-wire)
+- **pixel count = 62** (firmware currently 36 → MUST change to 62)
+- **color format = RGB, 24-bit** (NOT RGBW; firmware uses CRGBW/32-bit → MUST change to RGB)
+- data line: `CN1.DIM` (blue) → strip **DIN**, via 3.3→4.7 V level buffer
+- construction: 200 Ω (`201`) inter-pixel data series-R + decoupling cap every 3 px (standard)
+- protocol: 800 kHz NZR (WS2812/SK6812-class); confirm exact color order (likely GRB) on bring-up
+- ⚠️ FIRMWARE (Phase 5): set count=62, switch outer ring to 24-bit RGB, verify color order
+- ⚠️ CURRENT (risk R3): 62 RGB px worst-case ≫ 4.7 V rail budget → brightness cap mandatory
 
 ---
 
