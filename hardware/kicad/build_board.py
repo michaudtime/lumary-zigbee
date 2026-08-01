@@ -16,6 +16,12 @@ OUT  = os.path.join(HERE, "lumary-brain.kicad_pcb")
 FPBASE = r"C:/Program Files/KiCad/10.0/share/kicad/footprints"
 
 BOARD_W, BOARD_H = 63.3, 31.3   # mm
+# Ends are single 18mm-radius arcs (case corner rounding, user-measured): each end
+# bulges sagitta = R - sqrt(R^2-(H/2)^2) ~= 9.1mm deep -> ~45mm straight section
+# (matches user's "about 44mm square portion").
+import math as _math
+END_R  = 18.0
+SAG    = END_R - _math.sqrt(END_R**2 - (BOARD_H/2)**2)   # ~9.11 mm
 
 def mm(v): return pcbnew.FromMM(v)
 def xy(x, y): return pcbnew.VECTOR2I(mm(x), mm(y))
@@ -71,21 +77,22 @@ POS = {
  # === USER'S LAYOUT (adopted as baseline, 2026-08-01) ===
  # module top-left, antenna firing off the LEFT edge (keepout x<5.8 stays empty);
  # J1 power lower-left, J2 CN1 right edge, J3 USB bottom-center.
- "U1":(11.4, 7.1, 90), "J1":(13,24,-90), "J2":(59.5,19,90), "J3":(30.8,26.4,0),
+ # U1 nudged +1.9mm right (2026-08-01): rounded end arc clipped its corner pads
+ "U1":(13.8, 7.6, 90), "J1":(15.3,24,-90), "J2":(59.5,19,90), "J3":(30.8,26.4,0),
  "Q1":(38, 17.9, 90), "Q2":(44, 18.1, 90), "Q3":(50.5, 18, 90),
- "D1":(43.4, 4.5, 0), "D2":(43.4, 8.5, 0), "D3":(11, 18, 0),
+ "D1":(43.4, 4.5, 0), "D2":(43.4, 8.5, 0), "D3":(12, 18.5, 0),
  "C1":(53.5, 26, 0),
- "SW1":(20.5, 22, 0), "SW2":(20.5, 28, 0),
+ "SW1":(21.3, 22, 0), "SW2":(21.3, 28, 0),
  "U2":(38, 13.1, 90), "U3":(44, 13.1, 90),
  "R1":(40, 21, 0), "R2":(40, 22.5, 0), "R3":(45, 21, 0), "R4":(47.5, 21, 0),
  "R5":(42.5, 21, 0), "R9":(47.5, 24, 0),
  # === SUPPORT PARTS RELOCATED TO THEIR OWNERS (locality = function) ===
- "C6":(9, 15.3, 0),   "C5":(11.8, 15.3, 0),          # module 100n+10u at 3V3 pad (9.1,13)
+ "C6":(11.4, 15.8, 0), "C5":(14.0, 15.8, 0),         # module 100n+10u at 3V3 pad (11,13)
  "U4":(28.5, 19.2, 0), "R7":(32, 19.5, 0), "R8":(34.5, 19.5, 0),  # USB ESD+CC at J3 pads
  "C3":(34.6, 15.9, 0), "C2":(34.8, 12.5, 0),          # LDO in/out caps at U2 pins
  "C7":(46.5, 10.5, 0),                                 # buffer cap at U3
  "C4":(50.5, 21.5, 0),                                 # +4V7 bulk at Q3/J2 side
- "R6":(16, 15.2, 0),  "C8":(18.5, 15.2, 0),           # EN pullup+cap near module EN pad
+ "R6":(16.8, 15.2, 0),  "C8":(19.2, 15.2, 0),           # EN pullup+cap near module EN pad
 }
 
 # ---- netlist: (ref, pad) -> net ------------------------------------------
@@ -194,14 +201,32 @@ def main():
         ref.SetTextPos(f.GetPosition())
         f.Value().SetVisible(False)
 
-    # board outline (rectangle) on Edge.Cuts
-    corners = [(0,0),(BOARD_W,0),(BOARD_W,BOARD_H),(0,BOARD_H),(0,0)]
-    for (x1,y1),(x2,y2) in zip(corners, corners[1:]):
-        seg = pcbnew.PCB_SHAPE(board)
-        seg.SetShape(pcbnew.SHAPE_T_SEGMENT)
-        seg.SetStart(xy(x1,y1)); seg.SetEnd(xy(x2,y2))
-        seg.SetLayer(pcbnew.Edge_Cuts); seg.SetWidth(mm(0.15))
-        board.Add(seg)
+    # board outline: straight top/bottom + single 18mm-radius arc at each end
+    W,H,R,S = BOARD_W, BOARD_H, END_R, SAG
+    def line(x1,y1,x2,y2):
+        s=pcbnew.PCB_SHAPE(board); s.SetShape(pcbnew.SHAPE_T_SEGMENT)
+        s.SetStart(xy(x1,y1)); s.SetEnd(xy(x2,y2))
+        s.SetLayer(pcbnew.Edge_Cuts); s.SetWidth(mm(0.15)); board.Add(s)
+    def arc(sx,sy,mx,my,ex,ey):
+        s=pcbnew.PCB_SHAPE(board); s.SetShape(pcbnew.SHAPE_T_ARC)
+        s.SetArcGeometry(xy(sx,sy), xy(mx,my), xy(ex,ey))
+        s.SetLayer(pcbnew.Edge_Cuts); s.SetWidth(mm(0.15)); board.Add(s)
+    line(S,0, W-S,0)                       # top
+    arc(W-S,0, W,H/2, W-S,H)               # right end bulge
+    line(W-S,H, S,H)                       # bottom
+    arc(S,H, 0,H/2, S,0)                   # left end bulge
+
+    # x of the left/right board edge at height y (arc equation)
+    def xl(y): return END_R - _math.sqrt(END_R**2 - (y-H/2)**2)
+    def xr(y): return W - xl(y)
+
+    # audit: warn about any copper pad outside (or within 0.5mm of) the outline
+    for f in fps.values():
+        for pad in f.Pads():
+            if pad.GetAttribute()==pcbnew.PAD_ATTRIB_NPTH: continue
+            p=pad.GetPosition(); px,py=pcbnew.ToMM(p.x),pcbnew.ToMM(p.y)
+            if not (0<=py<=H) or px < xl(py)+0.5 or px > xr(py)-0.5:
+                print(f"  !! pad near/off edge: {f.GetReference()}.{pad.GetNumber()} at ({px:.1f},{py:.1f})")
 
     # no-fill keepouts around NPTH mounting holes (J3 USB-C pegs) so zone fill
     # honours hole clearance
@@ -223,16 +248,26 @@ def main():
                     ka.Outline().Append(int(c.x+dx), int(c.y+dy), o)
                 board.Add(ka)
 
-    # GND zones: pours on F/B + solid planes on both inner layers, inset from the
-    # board edge. The module's antenna rule-area keeps copper out of the antenna region.
+    # GND zones: pours on F/B + solid planes on both inner layers, following the
+    # rounded outline inset 0.6mm (arcs polygonised). The module's antenna
+    # rule-area keeps copper out of the antenna region.
     INSET = 0.6
+    def zone_pts():
+        # radial inset: end arcs shrink to radius END_R-INSET about the same centers
+        Ri = END_R - INSET
+        def xli(y): return END_R - _math.sqrt(Ri**2 - (y-H/2)**2)
+        pts=[]; n=24
+        ys=[INSET + i*(H-2*INSET)/n for i in range(n+1)]
+        for y in ys:            pts.append((xli(y), y))              # left arc, top→bottom
+        for y in reversed(ys):  pts.append((W - xli(y), y))          # right arc, bottom→top
+        return pts
+    ZPTS = zone_pts()
     for layer in (pcbnew.F_Cu, pcbnew.In1_Cu, pcbnew.In2_Cu, pcbnew.B_Cu):
         z = pcbnew.ZONE(board)
         z.SetLayer(layer)
         z.SetNet(nets["GND"])
         o = z.Outline().NewOutline()
-        for cx,cy in ((INSET,INSET),(BOARD_W-INSET,INSET),
-                      (BOARD_W-INSET,BOARD_H-INSET),(INSET,BOARD_H-INSET)):
+        for cx,cy in ZPTS:
             z.Outline().Append(mm(cx), mm(cy), o)
         z.SetLocalClearance(mm(0.3))
         z.SetMinThickness(mm(0.25))
