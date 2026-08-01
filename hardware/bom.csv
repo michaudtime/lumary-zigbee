@@ -28,5 +28,6 @@ R3,1,100k (Q1 gate pulldown),0402,VERIFY,VERIFY,Hold Q1 off at boot
 R4,1,100k (Q2 gate pulldown),0402,VERIFY,VERIFY,Hold Q2 off at boot
 R5,1,200R (ring data series),0402,VERIFY,VERIFY,U3 out -> CN1.DIM damping
 R6,1,10k (EN pullup),0402,VERIFY,VERIFY,EN -> 3V3
-R7,2,5.1k (USB CC1/CC2),0402,VERIFY,VERIFY,USB-C sink CC pulldowns (2 pcs)
-R8,1,100k (Q3 gate ref),0402,VERIFY,VERIFY,Reverse-polarity P-FET gate -> GND
+R7,1,5.1k (USB CC1),0402,VERIFY,VERIFY,USB-C CC1 pulldown
+R8,1,5.1k (USB CC2),0402,VERIFY,VERIFY,USB-C CC2 pulldown
+R9,1,100k (Q3 gate ref),0402,VERIFY,VERIFY,Reverse-polarity P-FET gate -> GND
