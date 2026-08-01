@@ -67,8 +67,10 @@ Wires: black=`LED+` (anode), white=`65K-` (cool return), yellow=`27K-` (warm ret
 - **DECISION (Task 1.2 gate): 0.23 W ≤ 0.5 W → clone HT7308 linear CC low-side sinks.**
   Set CC limit **~420 mA** (above the driver's 380 mA) so the board never limits below the driver
   (full brightness preserved; CC engages only as protection if headroom ever appears).
-- Optional fidelity: exact stock HT7308 sense-R (photos hinted `R680`=0.68 Ω) — nice-to-have, not
-  blocking, since we set our own ~420 mA limit. Confirm HT7308 V_ref from datasheet at BOM step.
+- Fidelity (DONE): stock uses **two HT7308** (`H7308 J2448D1`, U1=cool, U1A=warm). Sense resistors
+  `R5,R6` (ch1) and `R5A,R6A` (ch2), **all `R680`=0.68 Ω, two in parallel per channel ≈ 0.34 Ω**.
+  With HT7308 V_ref ≈ 0.13 V → **I ≈ 382 mA/channel** (matches the 380 mA driver). Confirm V_ref vs
+  datasheet at BOM step. Our board: use ~0.33 Ω (or 2×0.68 ∥) per channel → ~380–390 mA.
 
 ---
 
