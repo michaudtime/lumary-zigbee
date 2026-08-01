@@ -11,25 +11,37 @@ Replaces the Tuya WiFi controller inside a **Lumary 6" RGBAI recessed light** wi
 
 | Component | Part |
 |---|---|
-| Controller | ESP32-H2 Super Mini (~$5, ~25×18mm) |
+| Controller | **lumary-brain rev A** — custom ESP32-H2-MINI-1 board, drop-in for the stock `KOK-AH-A172C` (see `hardware/`) |
 | Target light | [Lumary Smart RGBAI Recessed Light 6"](https://www.lumarysmart.com/products/lumary-smart-recessed-light-with-gradient-auxiliary-light) |
 | Switch | [Inovelli Blue Series 2-1 Zigbee](https://inovelli.com/products/zigbee-matter-blue-series-smart-2-1-on-off-dimmer-switch) |
 
-### Wiring
+### The two light sources
+
+The fixture has two independent sources, and the firmware drives them separately:
+
+| Source | Hardware | Driven by |
+|---|---|---|
+| Outer "gradient" ring | 62-pixel 5 V 3535 **RGBIC** strip, 3 colour bytes/pixel (no white die) | One data line, NZR over SPI |
+| Inner white ring | 96 LEDs, 12 series × 4 parallel per colour, 2700 K + 6500 K | Two low-side PWM channels steering the driver's 380 mA |
+
+The external `L-SD8E1` driver supplies **36.63 V constant-current** (inner white anode) and **4.7 V** (ring + logic). The board never sources the white current — it gates and steers it.
+
+### Wiring (rev A board)
 
 | ESP32-H2 Pin | Signal | Destination |
 |---|---|---|
-| GPIO 11 (SPI2 MOSI) | SK6812 data | Outer ring 36-LED strip |
-| GPIO 2 | PWM cold white | Inner ring CW |
-| GPIO 3 | PWM warm white | Inner ring WW |
-| 3.3V | Power | Tap from existing driver board |
-| GND | Ground | Common ground |
+| GPIO 11 (SPI2 MOSI) | Ring data → 3.3→4.7 V buffer | `CN1.DIM` (ring DIN) |
+| GPIO 4 | PWM cold white → Q1 gate | `CN1.CW-` (6500 K return) |
+| GPIO 5 | PWM warm white → Q2 gate | `CN1.WW-` (2700 K return) |
+| GPIO 9 | BOOT button | Bench download / BLE OTA |
 
-> **Note:** SK6812 strips powered at 5V require a 74AHCT125 level shifter on the data line. Verify your strip voltage before wiring.
+> **Pin note:** GPIO 2/3/8/9/25 are ESP32-H2 strapping pins. The white PWM channels use GPIO 4/5 on rev A so the MOSFET gate pulldowns can't hold a strapping pin low at reset — the Super Mini prototype's GPIO 2/3 assignment does not carry over.
 
-## Why SPI instead of RMT for SK6812?
+> **Level shifting:** the ring runs on the 4.7 V rail, so its data line is buffered up from 3.3 V by a `74AHCT1G125` (AHCT accepts 3.3 V as a logic high).
 
-On ESP32-H2, the RMT peripheral conflicts with the Zigbee radio. Instead, SPI2 is used to bit-encode the single-wire NZR protocol: each NZR bit is encoded as 3 SPI bits (`1 → 110`, `0 → 100`) at 2.4 MHz, producing a valid 800 kHz signal on MOSI.
+## Why SPI instead of RMT for the ring?
+
+On ESP32-H2, the RMT peripheral conflicts with the Zigbee radio. Instead, SPI2 bit-encodes the single-wire NZR protocol: each NZR bit becomes 3 SPI bits (`1 → 110`, `0 → 100`) at 2.4 MHz, producing a valid 800 kHz signal on MOSI. The encoder lives in `src/pixel_encode.h`, deliberately free of ESP-IDF headers so it can be unit-tested on the host.
 
 ## Built-in Effects
 
@@ -107,8 +119,9 @@ pio device monitor
 ```
 src/
   config.h          — Pin definitions, constants
-  color.h           — CRGBW struct, HSV conversion, color math
-  led_driver.h/.cpp — SPI2 SK6812 driver + LEDC CW/WW PWM
+  color.h           — CRGB struct, HSV conversion, color math
+  pixel_encode.h    — NZR-over-SPI bit encoder (hardware-free, unit-tested)
+  led_driver.h/.cpp — SPI2 ring driver + LEDC CW/WW PWM
   effect_params.h   — EffectType enum, EffectParams struct
   effects.h/.cpp    — 8 effect implementations + lookup table
   scene_store.h/.cpp — NVS scene persistence
@@ -117,11 +130,27 @@ src/
   ble_ota.h/.cpp    — NimBLE OTA fallback
   main.cpp          — Setup, loop, watchdog
 test/
-  test_scene_store/ — Native unit tests for scene storage logic
+  test_pixel_encode/ — Host unit tests for pixel encoding + color math
+hardware/
+  kicad/            — Board design (build_board.py generates the .kicad_pcb)
+  bom.csv, calcs.md, schematic-nets.md
 docs/
   spec.md           — Hardware + software design specification
   plan.md           — Implementation plan
+  superpowers/      — Board replacement spec, plan, and Phase 0 measurements
 ```
+
+## Tests
+
+Hardware-independent logic (pixel encoding, colour math) has host-side unit tests:
+
+```bash
+scripts\run-native-tests.bat
+```
+
+> PlatformIO's `platform = native` expects a gcc toolchain; this script compiles the
+> same tests with the MSVC Build Tools that are installed instead. `pio test -e native`
+> works as-is on a machine with gcc.
 
 ## Status
 
