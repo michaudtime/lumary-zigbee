@@ -80,14 +80,18 @@ each now gets the full dimmer range.
 
 Recorded here so Task 6.4 checks them rather than discovering them:
 
-1. **The L-SD8E1's spare 4.7 V capacity is unmeasured.** Every ring measurement came from a bench
-   PSU. In service that rail carries the ring *and* the module — roughly 0.6 A. `calcs.md` puts
-   the driver's spare capacity at "order of ~1 A, unconfirmed". Expected symptom if it is
-   insufficient is the **ring dimming or glitching**, not an MCU brownout: the LDO has ~1.2 V of
-   margin (4.7 V rail against ~3.5 V minimum input) before it drops out.
-2. **Full white on the ring is untested.** Measurements used saturation 40%, ≈73% of full-white
-   current; effects such as `warm_gradient` drive all three dice harder, extrapolating to ~0.66 A
-   against the 0.74 A rating.
+1. ~~**The L-SD8E1's spare 4.7 V capacity is unmeasured.**~~ **RETIRED 2026-08-15** by running the
+   real service wiring — driver supplying GND, 36 V and 4.7 V, bench PSU disconnected. The ring
+   held **steady and flicker-free at full brightness** drawing ~0.48 A, and again at saturation
+   25% (~0.55 A), while the module ran from the same rail. No dimming, colour shift or far-end
+   fade. The driver carries ring + module without sagging.
+2. **Full white on the ring remains untested**, and cannot be reached from Home Assistant at all:
+   `sat = 0` always routes to the white string, so the colour path tops out around saturation 25%
+   (~83% of full-white current). True full white needs an effect such as `warm_gradient` writing
+   near-white pixels, and effects are selected by Zigbee scene commands stored in NVS. It will
+   first be exercised whenever scenes are used. Extrapolates to ~0.66 A against the 0.74 A rating;
+   expected to be fine given the rail held 0.55 A without complaint and the trace has never warmed
+   measurably, but **expected is not measured**.
 3. **All measurements were open-air** at 23–29 °C. The fixture is a sealed ceiling can.
 
 ## 6. Testing
@@ -99,6 +103,19 @@ Recorded here so Task 6.4 checks them rather than discovering them:
 - **Ring at full:** drive a saturated colour at brightness 255 and re-image the `+4V7` trace on
   the **B.Cu** side, where the long 0.2 mm runs are.
 - **Rollback:** restore one line.
+
+**Results (2026-08-15, real service wiring — driver supplying all three rails, bench PSU removed):**
+
+| Check | Result |
+|---|---|
+| Native regression, 35 tests | pass, unchanged |
+| White at full (2702 K, 255) | **bright** — the defect fixed; `Q2` 36 °C, `U2` 38 °C |
+| Ring at full (sat 40%, 255) | steady, no flicker |
+| Ring at sat 25% (~83% of white) | steady, no flicker |
+
+`Q2` at 36 °C against 6.3's 37 °C, and `U2` at 38 °C against 40 °C. `U2` running slightly cooler
+is expected: it is now fed from the 4.7 V rail rather than USB's 5 V, dropping 1.4 V instead of
+1.7 V and dissipating ~20% less.
 
 ## 7. Out of scope
 
