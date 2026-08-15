@@ -42,6 +42,11 @@ Rails: `+36V` = 36.63 V constant-current (380 mA), `+4V7` = 4.7 V logic/ring, `G
     Measured from USB (5 V → 3.3 V); installed it runs from +4V7 and dissipates ~20% less.
   - **Risk R1 cleared.** Caveat: open-air bench. The sealed ceiling can raises ambient, so the
     deltas hold but absolutes will be higher — confirm in-fixture (plan Task 6.4).
+  - **White LED strip itself: 54 °C** at 100% duty, loose on the bench. It dissipates the whole
+    ~13.7 W (380 mA × ~36 V); the board only gates that current and never sources it, which is
+    why Q1/Q2 stay near ambient by comparison. Unremarkable for the part, and identical to what
+    the stock controller produced since the driver's 380 mA CC output is unchanged. Installed it
+    bolts to the aluminium can and is heatsinked better than on a bench.
   - **Still unmeasured: the 0.2 mm `+4V7` trace.** The ring rail was disconnected throughout this
     test, so the trace carried nothing. It is the constraint that sets `MAX_BRIGHTNESS`, and now
     that a thermal camera is on hand, imaging it with the ring lit is the direct evidence needed
