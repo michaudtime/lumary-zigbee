@@ -62,10 +62,19 @@ The chosen mechanism was spiked and **works**:
 A `LumaryLight` subclass of `ZigbeeColorDimmableLight`, in `zigbee_light.cpp` with the rest of the
 adapter:
 
+> **Corrected during implementation.** This section originally specified selection as an *attribute
+> write* handled by overriding `zbAttributeSet`. That is impossible: `ZigbeeColorDimmableLight`
+> declares `zbAttributeSet` **private** (`ZigbeeColorDimmableLight.h:158`), so a subclass may
+> override it but cannot call it. Overriding would have left on/off, level and colour with no
+> handler at all and silently broken the light. Selection is therefore a **custom command** via
+> `onCustomClusterCommand`, which is public and is the library's intended extension point, and the
+> attribute is **read-only** state.
+
 - **Constructor** adds custom cluster `0xFC00` with one attribute `0x0000` `effect` (u8,
-  read/write), seeded from `scene_store_get_active()` so it is truthful at boot.
-- **`zbAttributeSet` override** intercepts `0xFC00`/`0x0000` and **delegates everything else to the
-  base implementation**, leaving on/off, level and colour untouched.
+  **read-only**), kept in step so a read reports what is actually running.
+- **`onCustomClusterCommand`** receives `LUMARY_CMD_SET_EFFECT` (`0x00`) with a one-byte payload —
+  the effect index. The cluster, command id and payload size are all checked before use, since this
+  arrives straight off the air.
 - **`zigbee_light_set_effect(uint8_t n)`**: ignore if `n >= EFFECT_COUNT`; otherwise
   `light_state_set_scene` (returns to `MODE_SCENE`), `scene_store_set_active` to persist, and write
   the attribute back so reads and the HA UI reflect reality.
