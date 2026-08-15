@@ -11,10 +11,21 @@ static CRGB leds[RING_NUM_LEDS];
 
 // Hard brightness ceiling -- a HARDWARE limit on rev A, not just a bench guard.
 // The +4V7 traces routed at 0.2 mm (KiCad dropped the Power net class before
-// routing), which carries ~0.74 A at a 10 C rise. Ring + module at this setting
-// draws ~0.55 A; at full brightness it would be ~1.5 A and cook the trace
-// (~49 C rise). The safe ceiling is about 37. See hardware/calcs.md.
-// Do NOT raise this toward 255 on a rev A board.
+// routing), which carries ~0.74 A at a 10 C rise, and at full brightness the
+// ring alone would draw ~1.2 A and cook it.
+//
+// MEASURED 2026-08-15 (bench, 4.7 V rail, module on USB so its draw is excluded):
+// 62 px at (24,14,14) = 0.122 A, of which 0.040 A is the strip's dark quiescent
+// current. That extrapolates to 1.21 A for full white at full brightness --
+// within 3% of the 1.24 A predicted in hardware/calcs.md -- and only ~0.15 A for
+// full white at this cap. So the earlier "~0.55 A at this setting" note was too
+// pessimistic by ~3.5x, and the trace budget would in principle allow a ceiling
+// near 100.
+//
+// Left at 24 deliberately: the measurement is open-air on a bench, and the real
+// fixture is a sealed ceiling can with no airflow. Do not raise it until the
+// in-fixture thermal run (plan Task 6.4) says otherwise, and prefer fixing the
+// trace width in rev B over spending the margin here.
 #define MAX_BRIGHTNESS 24
 
 // Set to 1 to cycle every effect on a timer with no Zigbee network, for

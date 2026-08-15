@@ -144,8 +144,8 @@ channel; it does not regulate current (the stock `HT7308` linear regs existed fo
 |---|---|---|---|
 | P0.1 | Power-in + `CN1` connector pin count, **pitch**, part family (JST SH/GH/ZH/PH) | Calipers + continuity | TODO |
 | P0.2 | Input rail voltages/polarity | DMM | **DONE** — 36.63 V / 4.7 V / GND |
-| P0.3 | `CN1` full pin order; confirm `+A`/`-A` = ring data/return | Continuity trace | TODO |
-| P0.4 | Outer ring: chip type, pixel count, protocol | Read pixel marking / clean re-capture | TODO (`digital.csv` unusable) |
+| P0.3 | `CN1` full pin order; confirm `+A`/`-A` = ring data/return | Continuity trace | **DONE** (2026-08-14) — stock silkscreen reads `V+ · CW- · WW- · 5V+ · GND · DIM`, 6 signals in that order, matching rev A `J2` pins 1–6. There is no separate `+A`/`-A` pair: the ring shares `5V+`/`GND` and takes data on `DIM`. Harness carries 6 wires (black, white, yellow, red, teal, blue). |
+| P0.4 | Outer ring: chip type, pixel count, protocol | Read pixel marking / clean re-capture | **DONE** (2026-08-15, Saleae capture at both ends of the data lead). 62 px × 24 bits = **1488 bits in every one of 316 frames**; **RGB** wire order, not GRB; 16.00 ms frame period. Exact part still unmarked, but its timing rules out plain WS2812B: at `T0H` 417 ns (WS2812B nominal) ~11% of frames showed a single corrupted pixel; at **312 ns** it is clean. That is SK6812-family behaviour (`T0H` max 450 ns). |
 | P0.5 | White sub-string series count + `HT7308` sense-resistor value → CC setpoint & headroom/heat | Read markings + DMM | TODO |
 | P0.6 | Board outline, mounting holes/standoffs, **max component height**, antenna keepout region | Calipers / flatbed scan | TODO |
 
@@ -191,6 +191,12 @@ finish/verify routing + DRC in KiCad) → Gerbers + BOM + CPL → JLCPCB PCBA.
   expected, but confirm before committing linear CC vs switching sink.
 - **R2 — Connector sourcing:** exact JST family/pitch must match (P0.1) or the drop-in claim
   fails. Confirm JLCPCB stocks the matching part or plan an alternate.
+  > **REALIZED on rev A (2026-08-14).** P0.1 was never measured; `build_board.py:43` assumed a
+  > Molex PicoBlade 7-way (`53047-0710`). The fixture harness plug is physically **too wide** to
+  > seat on `J2`. Signal order is fine (P0.3 confirms `J2` 1–6 matches the stock silkscreen) —
+  > this is purely mechanical. Rev A therefore **cannot** be dropped in without either an adapter
+  > lead or a re-housed harness, and Task 6.4 is blocked. Rev B must carry the measured part.
+  > Bench tasks 6.2/6.3 are unblocked by jumpering `J2` directly.
 - **R3 — 4.7 V ring rail current budget:** total ring current at full white may exceed the
   driver's spare capacity; keep the firmware brightness cap and quantify in P0.4.
 - **R4 — Board depth vs can:** confirm MINI-1 + connectors fit the stock height envelope (P0.6).

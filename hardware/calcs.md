@@ -20,6 +20,16 @@ Rails: `+36V` = 36.63 V constant-current (380 mA), `+4V7` = 4.7 V logic/ring, `G
 - 62 px, 3535 RGBIC (RGB). Per-pixel full-white ≈ 3 × ~6 mA ≈ **~18 mA** (3535 is lower-power than 5050); worst-case ≈ 62 × ~20 mA ≈ **1.24 A** at ~5 V.
 - The driver's `+4V7` rail spare capacity is **unknown** (input 24 W − 13.6 W white ≈ ~10 W gross, minus efficiency → order of ~1 A, unconfirmed).
 - **Conclusion:** full-brightness all-white on 62 px would exceed the rail. **Firmware brightness cap is mandatory** (already present as `BENCH_BRIGHTNESS`). Quantify the safe average once the rail's real limit is measured; keep the cap conservative until then.
+- **MEASURED 2026-08-15** (rev A, bench supply on `+4V7`, module powered from USB so excluded):
+  - 62 px dark, quiescent: **0.040 A** (~0.65 mA/px)
+  - 62 px at `(24,14,14)` (`MAX_BRIGHTNESS` 24, sat 40%): **0.122 A**
+  - → LED current 0.082 A for 52 of 765 channel-units, i.e. **~1.5 mA per unit across the ring**
+  - → extrapolated full white at full brightness: **1.21 A**, against the 1.24 A predicted above.
+    The per-pixel 3535 estimate is **confirmed to within 3%**.
+  - → full white at the current cap of 24: **~0.15 A**, not the ~0.55 A previously assumed.
+  - **Implication:** against the 0.74 A trace limit the cap could rise to roughly 100 on paper.
+    Not acted on — the measurement is open-air, the fixture is a sealed can, and rev B should
+    fix the trace width rather than spend the margin. Revisit after plan Task 6.4.
 
 ### Inner white sink (from P0.5)
 - Headroom ≈ 0.6 V, sink current 380 mA → **≈ 0.23 W per channel**, one color full at a time.
