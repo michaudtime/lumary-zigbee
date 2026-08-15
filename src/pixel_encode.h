@@ -5,9 +5,9 @@
 #include "color.h"
 
 // Bit-bangs the single-wire NZR protocol over SPI MOSI: each data bit becomes
-// three SPI bits (1 -> 110, 0 -> 100), so a 2.4 MHz SPI clock yields the 800 kHz
-// bit rate the pixels expect. Kept free of ESP-IDF headers so the encoding can
-// be unit-tested on the host -- see test/test_pixel_encode.
+// four SPI bits (1 -> 1100, 0 -> 1000), so a 3.2 MHz SPI clock yields the
+// 800 kHz bit rate the pixels expect. Kept free of ESP-IDF headers so the
+// encoding can be unit-tested on the host -- see test/test_pixel_encode.
 
 // Wire order. WS2812/SK6812-family parts latch green first; if bring-up shows
 // red and green swapped, build with -DPIXEL_WIRE_ORDER_GRB=0.
@@ -15,7 +15,15 @@
 #define PIXEL_WIRE_ORDER_GRB 1
 #endif
 
-static const int kSpiBitsPerNzrBit = 3;
+// 4 SPI bits per NZR bit at 3.2 MHz: "0" -> 1000 (T0H 312 ns), "1" -> 1100
+// (T1H 625 ns), 1.25 us period. The earlier 3-bits-at-2.4 MHz scheme gave
+// T0H 417 ns, which is nominal for WS2812B but sits on the SK6812 family's
+// 450 ns ceiling -- bring-up 2026-08-15 saw random single-pixel corruption
+// consistent with '0' bits occasionally latching as '1'. A logic capture at
+// both ends of the data lead proved the wire and the framing were perfect
+// (1488 bits every frame, zero bit differences), leaving pulse width as the
+// only candidate. 312/625 ns is centred for SK6812 and still inside WS2812B.
+static const int kSpiBitsPerNzrBit = 4;
 static const int kColourBytesPerPixel = 3;
 
 // SPI bytes needed for `count` pixels, excluding the trailing reset padding.

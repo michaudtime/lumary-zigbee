@@ -46,7 +46,9 @@ void led_driver_init() {
 }
 
 void led_driver_show(const CRGB* leds, uint16_t count) {
-    pixel_encode(leds, count, s_spi_buf, RING_SPI_BUF_SIZE);
+    memset(s_spi_buf, 0, RING_SPI_LEAD_BYTES);
+    pixel_encode(leds, count, s_spi_buf + RING_SPI_LEAD_BYTES,
+                 RING_SPI_BUF_SIZE - RING_SPI_LEAD_BYTES);
     spi_transaction_t t = {};
     t.length    = RING_SPI_BUF_SIZE * 8;
     t.tx_buffer = s_spi_buf;

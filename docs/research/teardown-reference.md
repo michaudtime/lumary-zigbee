@@ -13,7 +13,11 @@ The original controller board removed from the light. Key observations:
 - **Chip:** Tuya CBU module (white rectangular module, top center) — BK7231N WiFi SoC
 - **FCC ID:** 2ANDL-CBU, Model: CBU, P/N: 4210000041
 - **Form factor:** Rounded/pill-shaped PCB, approximately 60×35mm
-- **Connector:** Multi-pin JST connector at bottom (8–10 pins) — this connects to the LED wiring harness
+- **Connector:** `CN1`, **7 positions, 6 populated** (position 7 empty) — connects to the LED
+  wiring harness. Confirmed 2026-08-15 from [`stock-board-cn1-labels.jpg`](stock-board-cn1-labels.jpg),
+  whose silkscreen reads `V+ · CW- · WW- · 5V+ · GND · DIM` in that order (supersedes the
+  earlier "8–10 pins" estimate, which is what led rev A to be built on a guessed part).
+  Pitch/family still unmeasured (P0.1) — the rev A PicoBlade 1.25 mm choice does **not** mate.
 - **Passives:** 330Ω resistor upper left, two 4.7µF 50V capacitors
 - **Logic IC:** A08G AND gate (controls outer ring enable logic)
 - This board lives in the **separate control box**, not inside the light body

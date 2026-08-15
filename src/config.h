@@ -18,11 +18,20 @@
 // ── Outer ring (addressable) ──────────────────────────
 // UT-08-ZC03-01-5V3535RGBIC: 62 pixels, 3 colour bytes each (no white die).
 #define RING_NUM_LEDS         62
-#define RING_SPI_CLK_HZ       2400000  // 2.4 MHz → 3 SPI bits = one 800kHz NZR bit
-// Data: 62 LEDs × 24 bits × 3 SPI bits/bit = 4464 bits = 558 bytes.
-// Reset: +90 zero bytes ≈ 300 µs latch, generous enough for WS2812B-V5 parts
-// (which want >280 µs) as well as older ones (>80 µs).
-#define RING_SPI_BUF_SIZE     648
+#define RING_SPI_CLK_HZ       3200000  // 3.2 MHz → 4 SPI bits = one 800kHz NZR bit
+// Data: 62 LEDs × 24 bits × 4 SPI bits/bit = 5952 bits = 744 bytes.
+// One SPI byte is 2.5 µs at this clock.
+// Reset: +120 trailing zero bytes = 300 µs latch, generous enough for
+// WS2812B-V5 parts (which want >280 µs) as well as older ones (>80 µs).
+#define RING_SPI_BUF_SIZE     896
+// Leading low period, transmitted before the pixel data. MOSI is not guaranteed
+// to idle low between transactions, and a line already high when the frame
+// starts robs the first NZR bit of its rising edge. Kept as cheap insurance: it
+// did not fix the corruption seen during bring-up on 2026-08-15 (a logic
+// capture showed the real cause was T0H pulse width, see pixel_encode.h), but a
+// guaranteed-low line before the first bit is correct practice for SPI-driven
+// NZR. 32 bytes = 80 µs.
+#define RING_SPI_LEAD_BYTES   32
 
 // ── PWM (inner white string) ──────────────────────────
 // The external L-SD8E1 driver is a 380 mA constant-current source; the board
@@ -35,6 +44,22 @@
 #define PWM_CHANNEL_WW        LEDC_CHANNEL_1
 
 // ── Zigbee ────────────────────────────────────────────
+// Effect selection rides a manufacturer-specific cluster, because nothing
+// standard can carry it: the Scenes cluster stores colour/level and knows
+// nothing about EffectParams, and the Identify trigger-effect command (which
+// is what Z2M's built-in "effect" dropdown drives) has no hook in the Arduino
+// library. Writing LUMARY_ATTR_EFFECT selects one of the eight effects.
+// See docs/superpowers/specs/2026-08-15-effect-selection-design.md.
+// Selection arrives as a COMMAND rather than an attribute write: ZigbeeColor
+// DimmableLight declares zbAttributeSet private, so a subclass can override it
+// but cannot delegate on/off, level and colour back to the base -- overriding
+// would silently break the light. onCustomClusterCommand is public and is the
+// library's intended extension point. The attribute is read-only state, kept in
+// step so Z2M/HA can display which effect is running.
+#define LUMARY_CLUSTER_ID       0xFC00   // manufacturer-specific range
+#define LUMARY_ATTR_EFFECT      0x0000   // u8, read-only: effect currently running
+#define LUMARY_CMD_SET_EFFECT   0x00     // payload: one u8, the effect index
+
 #define LIGHT_ENDPOINT        1
 #define ZB_MANUFACTURER_CODE  0x1001
 #define ZB_IMAGE_TYPE         0x0001

@@ -309,18 +309,110 @@ git commit -m "docs: phase 0 measurement template"
 
 ### Task 6.1: USB-only bring-up — [USER]
 
-- [ ] **Step 1:** Power the assembled board from USB-C **only** (no fixture). Expected: enumerates as USB-CDC, `pio device monitor` shows `boot ok`.
-- [ ] **Step 2: Verify** the module joins a Zigbee network. PASS/FAIL. If FAIL, check 3V3 rail and EN/BOOT first.
+- [x] **Step 0:** Boards arrive blank — flash before expecting `boot ok`:
+      `pio run -e esp32h2 -t upload --upload-port COMn`. A blank chip enumerates
+      on the ROM's USB-Serial-JTAG but boot-loops on `invalid header: 0xffffffff`,
+      and the resulting watchdog reset tears USB down, so the port appears and
+      vanishes on a ~3.1 s cycle. That is expected on a virgin board, not a fault
+      — the tell is the reset reason: `TG0_WDT_HPSYS`/`USB_UART_HPSYS` and **no**
+      `BROWN_OUT_RST`.
+- [x] **Step 1:** Power the assembled board from USB-C **only** (no fixture). Expected: enumerates as USB-CDC, `pio device monitor` shows `boot ok`.
+      **PASS** (2026-08-13, board MAC `74:4d:bd:6b:57:5f`): `boot ok` + `LED driver init ok`,
+      35 s with 0 resets and 0 USB drops.
+      First attempt panic-looped 41× on `ZB_ESP_NVRAM: Failed to find zb_storage partition`
+      (`zb_esp_nvram.c:84`) — `min_spiffs.csv` has no `zb_storage`/`zb_fct`. Fixed by
+      switching `board_build.partitions` to `zigbee_zczr.csv`, which matches the
+      `ZIGBEE_MODE_ZCZR` build and keeps app0/app1 for OTA. Latent since the 3.3.11
+      framework upgrade, which was only verified to build.
+- [x] **Step 2: Verify** the module joins a Zigbee network. PASS/FAIL. If FAIL, check 3V3 rail and EN/BOOT first.
+      **PASS** (2026-08-13): steering failures stopped on permit-join; device then queried the
+      coordinator (`0x0`) for an OTA image and correctly rejected the empty response. OTA client
+      registration is therefore already proven — Task 6.4 only needs a real image to offer.
 
 ### Task 6.2: Ring rail + data — [USER]
 
 - [ ] **Step 1:** Add 4.7 V to the input (bench supply, current-limited to ~0.5 A). Expected: outer ring lights and animates via the level-shifted data.
-- [ ] **Step 2: Verify** ring colors correct and no data glitches. PASS/FAIL.
+      > **The 0.5 A limit is marginal, but not for the reason first assumed.** `main.cpp`
+      > clamps every effect to `MAX_BRIGHTNESS` = 24/255 — a rev A *hardware* ceiling set by
+      > the 0.2 mm `+4V7` traces, not a bench guard — so the ring cannot be driven to the
+      > multi-amp worst case at all. Expect **~0.55 A** for ring + module at the cap, which is
+      > slightly *over* a 0.5 A limit: set the supply to ~0.8 A for this task, still well
+      > under the ~1.5 A that would cook the trace.
+      > Note also that a plain "on" lands in `EFFECT_STATIC_WHITE`, which blanks the ring and
+      > drives the CW/WW string instead — so it lights nothing while 36 V is disconnected.
+      > To exercise the ring, send a **saturated colour** (`sat` > `WHITE_SAT_THRESHOLD` = 32).
+- [x] **Step 2: Verify** ring colors correct and no data glitches. **PASS** (2026-08-15) — red,
+      green and blue each render correctly, full ring lit, no glitches. Ring current measured:
+      0.122 A at the brightness cap, 0.040 A quiescent (see `hardware/calcs.md`, R3 now closed).
+      Two defects found and fixed on 2026-08-15, in this order:
+      1. **Wire order** — commanding red lit the ring green. The strip is **RGB**, not the
+         WS2812/SK6812-family GRB the encoder defaulted to. Fixed with
+         `-DPIXEL_WIRE_ORDER_GRB=0` in `platformio.ini`.
+      2. **`T0H` pulse width** — random single pixels showed clean green or blue in ~11% of
+         frames. Diagnosed with a two-channel Saleae capture probing `J2.6` and the ring's DIN
+         together: **zero bit differences** between the two ends across 470,208 bits, and
+         exactly 1488 bits in all 316 frames, which cleared the wiring, the encoder and the
+         framing. That left pulse width: 3 SPI bits at 2.4 MHz gives `T0H` 417 ns, right on the
+         SK6812 family's 450 ns ceiling, so `0` bits occasionally latched as `1`. Because the
+         commanded red was only 23/255, one spurious bit in another channel visually swamped
+         it — hence "clean green or blue" rather than a muddy shade. Fixed by moving to 4 SPI
+         bits at 3.2 MHz (`T0H` 312 ns, `T1H` 625 ns, same 1.25 µs period). Ring is solid.
+      > Two wrong turns worth remembering: the apparent "chasing" was random single-pixel
+      > errors at 62 fps, not a travelling shift, and a leading-reset fix aimed at that wrong
+      > model changed nothing (it was kept as correct practice, not as the fix).
 
 ### Task 6.3: 36 V white string — [USER]
 
 - [ ] **Step 1:** Connect a **current-limited** supply to `+36V` (limit 0.4 A) with the white LED module attached. Sweep CW/WW PWM. Expected: smooth dimming + CCT shift between cool and warm.
-- [ ] **Step 2: Verify** measured leg current ≈ P0.5 `I_set`; low-side device temperature stable under 5 min sustained full-brightness. PASS/FAIL (thermal risk R1 gate).
+      > **Use CC mode, not CV-with-a-limit.** P0.5 measured Vf_string ≈ 36 V against a 36.63 V
+      > rail — **~0.6 V of headroom**. A CV supply at 36 V sits on that knife edge: slightly low
+      > and the string barely conducts, slightly high and current runs away into the limit. Set
+      > the supply to **CC 380 mA with ~37 V compliance**, which is what the L-SD8E1 actually does.
+      > **Bench-supply ceiling:** many 30 V units cannot reach 36.63 V at all. If yours tops out
+      > below ~37 V, 6.3 must be run from the real L-SD8E1 driver instead.
+      > The MCU can run from USB and the ring can stay dark for this task, so a single supply on
+      > the 36 V rail is sufficient — 4.7 V is only needed when testing the ring.
+- [x] **Step 1** — **PASS** (2026-08-15). Run from the **real L-SD8E1**, not a bench supply: the
+      available PSU tops out at 30 V and cannot reach the string's ~36 V forward voltage at all.
+      The driver is the better article anyway, being genuinely CC. Setup was power box white →
+      `J1` middle (GND), blue → `J1` bottom (+36 V), **red 4.7 V left off** so the ring rail
+      stayed dead, module on USB. Both channels lit and both sweeps — CCT end to end, and
+      brightness down to zero — were smooth, with no steps, flicker or dropouts.
+      > **Watch the wire colours.** They mean different things on the two sides of the board:
+      > on the input side red/white/blue are 4.7 V / GND / 36 V, on the output side they are
+      > `5V+` / `CW-` / `DIM`. An hour was lost to "disconnect the red wire" being ambiguous.
+- [x] **Step 2: Verify** measured leg current ≈ P0.5 `I_set`; low-side device temperature stable
+      under 5 min sustained full-brightness. **PASS on thermals** (2026-08-15) — risk **R1 cleared**.
+      Worst case deliberately chosen: 2702 K puts `cct` = 0, so `Q2` carries the full 380 mA at
+      100% duty while `Q1` is off. Held 15 minutes, measured with a thermal camera:
+      | | Temp | Rise over 23.3 °C (74 °F) ambient |
+      |---|---|---|
+      | `Q2` at 380 mA, 100% duty | 37 °C | 13.7 °C |
+      | `U2` LDO — hottest point on the board | 40 °C | 16.7 °C |
+      At the predicted ~0.23 W that implies θJA ≈ 60 °C/W, far better than the ~250 °C/W a bare
+      SOT-23 sees in free air — the copper pour is doing the work. `U2` runs from USB here (5 V →
+      3.3 V); installed it is fed from 4.7 V and dissipates less.
+      **Not verified:** leg current was never metered in series, so P0.5's `I_set` is still taken
+      on trust from the driver's CC rating.
+      **Caveat:** open-air bench at 23 °C. The fixture is a sealed ceiling can, so the deltas hold
+      but the absolute temperatures will be higher — re-check during Task 6.4.
+
+### Effect engine — verified 2026-08-15
+
+Not a numbered task, but the effects had never run on hardware and are recorded here.
+Exercised via `BENCH_DEMO_MODE` (`main.cpp`), which cycles all eight from `kDefaultParams` at
+5 s each with the effect name on serial; four full cycles, zero errors or resets.
+
+**All eight render correctly**, including the two reworked blind after the outer strip turned
+out to have no white die: `nightlight`, which now mixes warm white from the RGB dice, and
+`chase`, which gained a div-by-zero guard. Both had been written against an assumption and
+never tested until now.
+
+This also runs the ring closer to full white than Home Assistant can reach — `warm_gradient`
+drives all three dice at brightness 200 — with no flicker or sag from the driver's 4.7 V rail.
+
+Still untested: **NVS scene storage**. The demo mode uses `kDefaultParams` directly and bypasses
+`scene_store` entirely, so saving and recalling scenes over Zigbee has never been exercised.
 
 ### Task 6.4: In-fixture drop-in test — [USER]
 

@@ -9,13 +9,26 @@
 
 static CRGB leds[RING_NUM_LEDS];
 
-// Hard brightness ceiling -- a HARDWARE limit on rev A, not just a bench guard.
-// The +4V7 traces routed at 0.2 mm (KiCad dropped the Power net class before
-// routing), which carries ~0.74 A at a 10 C rise. Ring + module at this setting
-// draws ~0.55 A; at full brightness it would be ~1.5 A and cook the trace
-// (~49 C rise). The safe ceiling is about 37. See hardware/calcs.md.
-// Do NOT raise this toward 255 on a rev A board.
-#define MAX_BRIGHTNESS 24
+// There was a MAX_BRIGHTNESS ceiling of 24/255 here, clamped ahead of every
+// effect to protect rev A's +4V7 traces -- routed at 0.2 mm rather than 0.5 mm
+// because KiCad dropped the Power net class before routing (a1270ba), giving
+// ~0.74 A at a 10 C rise.
+//
+// Removed 2026-08-15 after bench measurement retired the premise, and because
+// the clamp sat ahead of every effect it also throttled the inner white string
+// to ~9% duty -- the fixture's main light source, whose current never touches
+// that trace at all. See docs/superpowers/specs/
+// 2026-08-15-remove-rev-a-brightness-ceiling-design.md and hardware/calcs.md.
+//
+//   ring at full brightness   0.48 A measured (1.2 A had been assumed), cold or
+//                             warm, with no measurable trace heating in 3 runs
+//   white at 100% duty        Q2 at 37 C after 15 min (Task 6.3)
+//
+// Still unverified in service, and what Task 6.4 must check: the L-SD8E1's
+// spare 4.7 V capacity. If that rail cannot carry ring + module, the symptom is
+// the ring dimming or glitching rather than an MCU brownout -- the LDO has
+// ~1.2 V of margin. A ring-only cap belongs here if that turns out to be real;
+// note a global clamp would be the wrong fix, since it throttles white too.
 
 // Set to 1 to cycle every effect on a timer with no Zigbee network, for
 // bench-testing the LED path over USB before the light is joined.
@@ -75,7 +88,6 @@ void loop() {
     const bool on  = s->on;
 #endif
 
-    if (p.brightness > MAX_BRIGHTNESS) p.brightness = MAX_BRIGHTNESS;
     if (p.type >= EFFECT_COUNT) p.type = EFFECT_STATIC_WHITE;   // NVS corruption guard
 
     kEffects[p.type].fn(now - effect_start, p, leds, on);

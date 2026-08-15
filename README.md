@@ -62,20 +62,41 @@ On ESP32-H2, the RMT peripheral conflicts with the Zigbee radio. Instead, SPI2 b
 |---|---|
 | 1× tap | On/Off |
 | Hold up/down | Brightness |
-| 2× tap up | Next scene/effect |
-| 2× tap down | Previous scene/effect |
+| 2× tap up | Next effect — **via hub automation**, see below |
+| 2× tap down | Previous effect — **via hub automation** |
 
-On/off and dimming use direct Zigbee binding — no hub required.
+On/off and dimming use direct Zigbee binding — **no hub required**, and they keep working if the
+coordinator is down.
 
-> **Not yet verified:** multi-tap events on the Inovelli are manufacturer-specific
-> and are normally sent to the coordinator rather than to a bound light, so the
-> 2× tap rows above may need a hub automation calling `zigbee_light_next_scene()` /
-> `zigbee_light_prev_scene()` rather than working over pure binding. Confirm during
-> bring-up (plan Task 6.4).
+> **Effect stepping is not hub-independent, and cannot be.** The Inovelli's multi-tap events are
+> manufacturer-specific and go to the coordinator rather than to a bound light, so nothing the
+> light does could make 2× tap work over pure binding. The automation reads the current
+> `effect_select` and writes the next one. Not yet verified end to end (plan Task 6.4).
 
-## Scene Management
+## Selecting an effect
 
-Scenes are stored on-device in NVS (survives power cuts). Up to 16 scenes. When HA/Z2M is available, use standard Zigbee "Add Scene" commands to create or modify scenes with custom parameters (effect type, color, brightness, speed).
+Effect selection rides a **manufacturer-specific cluster (`0xFC00`)**, because nothing standard can
+carry it: the Scenes cluster stores colour and level but knows nothing about an effect type, and
+the Identify trigger-effects that Z2M's built-in `effect` dropdown drives have no hook in the
+Arduino Zigbee library.
+
+Install [`z2m/lumary-brain-revA.js`](z2m/lumary-brain-revA.js) into Z2M's `data/external_converters/`
+and restart. That adds an **`effect_select`** control listing the eight effects by name. Without the
+converter the light still works normally — the effects are simply unreachable.
+
+Setting a colour or colour temperature **exits the effect** and shows that colour instead;
+brightness continues to scale whatever effect is running.
+
+The selected effect persists across power cuts (NVS).
+
+> **Stepping through effects from the wall switch** is done by a hub automation, not by the light:
+> read the current `effect_select` and write the next one. The Inovelli's multi-tap events go to
+> the coordinator rather than to a bound light, so a hub is in the loop regardless.
+
+Scene *storage* exists — 16 NVS slots, seeded with the defaults in `src/effect_params.h` — but
+editing them is **not implemented**. There is no Add Scene support; `scene_store_save()` is only
+called to seed defaults at first boot. Changing an effect's colour, speed or brightness
+permanently is a future change.
 
 ## OTA Updates
 

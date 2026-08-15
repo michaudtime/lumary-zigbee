@@ -5,8 +5,95 @@
 #include <Arduino.h>
 #include "Zigbee.h"
 
-static ZigbeeColorDimmableLight s_ep(LIGHT_ENDPOINT);
 static LightState s_state;
+
+static void apply_effect(uint8_t index);
+
+// ZigbeeColorDimmableLight plus one manufacturer-specific cluster carrying the
+// effect index. The Arduino wrapper has no cluster-building API, so the
+// constructor reaches _cluster_list (protected on ZigbeeEP) and uses the raw
+// esp_zb calls -- the same pattern the base class itself uses to bolt extra
+// attributes onto Colour Control.
+//
+// The attribute is READ-ONLY on purpose. Selection comes in as a command
+// instead, because zbAttributeSet is private in the base class: a subclass may
+// override it but cannot call it, so intercepting attribute writes would strand
+// on/off, level and colour with no handler at all.
+class LumaryLight : public ZigbeeColorDimmableLight {
+public:
+    explicit LumaryLight(uint8_t endpoint) : ZigbeeColorDimmableLight(endpoint) {
+        uint8_t effect = 0;
+        esp_zb_attribute_list_t* custom = esp_zb_zcl_attr_list_create(LUMARY_CLUSTER_ID);
+        esp_zb_custom_cluster_add_custom_attr(custom, LUMARY_ATTR_EFFECT,
+                                              ESP_ZB_ZCL_ATTR_TYPE_U8,
+                                              ESP_ZB_ZCL_ATTR_ACCESS_READ_ONLY,
+                                              &effect);
+        esp_zb_cluster_list_add_custom_cluster(_cluster_list, custom,
+                                               ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);
+    }
+
+    // Push the fixture's true state to the coordinator. Nothing else does this
+    // after a reboot, so Z2M keeps showing whatever it last saw -- typically
+    // "on" for a light that came back off, which it then reports to HA.
+    //
+    // Deliberately not built on setLightState()/setLightLevel(): those no-op
+    // when the value is unchanged (so at boot, where off == off, they would
+    // push nothing at all), and when the value HAS changed they re-enter our
+    // own light-changed callback, which would drag the light into MODE_COLOR.
+    // Writing the attributes and reporting them directly avoids both.
+    void publishState(bool on, uint8_t level, uint8_t effect) {
+        uint8_t on_val = on ? 1 : 0;
+        setAttr(ESP_ZB_ZCL_CLUSTER_ID_ON_OFF,
+                ESP_ZB_ZCL_ATTR_ON_OFF_ON_OFF_ID, &on_val);
+        setAttr(ESP_ZB_ZCL_CLUSTER_ID_LEVEL_CONTROL,
+                ESP_ZB_ZCL_ATTR_LEVEL_CONTROL_CURRENT_LEVEL_ID, &level);
+        setAttr(LUMARY_CLUSTER_ID, LUMARY_ATTR_EFFECT, &effect);
+
+        reportAttr(ESP_ZB_ZCL_CLUSTER_ID_ON_OFF,
+                   ESP_ZB_ZCL_ATTR_ON_OFF_ON_OFF_ID);
+        reportAttr(ESP_ZB_ZCL_CLUSTER_ID_LEVEL_CONTROL,
+                   ESP_ZB_ZCL_ATTR_LEVEL_CONTROL_CURRENT_LEVEL_ID);
+        // The effect attribute is deliberately NOT reported. esp_zb rejects it
+        // with ESP_ERR_NOT_SUPPORTED unless the attribute carries
+        // ESP_ZB_ZCL_ATTR_ACCESS_REPORTING -- and adding that flag to a custom
+        // cluster attribute makes Zigbee.begin() hang before it ever starts the
+        // stack (bisected on hardware 2026-08-15: with the flag, setup() reached
+        // "LED driver init ok" and never logged "Zigbee started"; without it,
+        // joined at 134 ms). The value is still written above, so a READ returns
+        // the truth, which is what the Z2M converter's convertGet uses.
+    }
+
+private:
+    void setAttr(uint16_t cluster, uint16_t attr, void* value) {
+        esp_zb_zcl_set_attribute_val(_endpoint, cluster,
+                                     ESP_ZB_ZCL_CLUSTER_SERVER_ROLE,
+                                     attr, value, false);
+    }
+
+    void reportAttr(uint16_t cluster, uint16_t attr) {
+        // Addressed at the coordinator explicitly rather than left to the
+        // binding table (ESP_ZB_APS_ADDR_MODE_DST_ADDR_ENDP_NOT_PRESENT, which
+        // is what the library's sensor endpoints use). This device was
+        // interviewed by Z2M under a generic definition before the external
+        // converter existed, so the bindings a sensor would rely on may never
+        // have been configured -- and a report sent into an empty binding table
+        // is dropped silently, which is exactly what was happening.
+        esp_zb_zcl_report_attr_cmd_t cmd = {};
+        cmd.zcl_basic_cmd.src_endpoint          = _endpoint;
+        cmd.zcl_basic_cmd.dst_endpoint          = 1;        // coordinator
+        cmd.zcl_basic_cmd.dst_addr_u.addr_short = 0x0000;   // coordinator
+        cmd.address_mode     = ESP_ZB_APS_ADDR_MODE_16_ENDP_PRESENT;
+        cmd.clusterID        = cluster;
+        cmd.attributeID      = attr;
+        cmd.direction        = ESP_ZB_ZCL_CMD_DIRECTION_TO_CLI;
+        cmd.manuf_specific   = 0x00U;
+        cmd.dis_default_resp = 0x00U;
+        cmd.manuf_code       = 0x0000U;
+        reportClusterAttribute(&cmd);
+    }
+};
+
+static LumaryLight s_ep(LIGHT_ENDPOINT);
 
 // The endpoint reports state, level and colour together on every change, so the
 // only way to tell a colour command from a plain dim is to compare against the
@@ -41,6 +128,21 @@ static void on_identify(uint16_t time) {
     log_i("Zigbee identify for %us", time);
 }
 
+// Effect selection. Runs on the Zigbee task. Everything is validated before it
+// reaches light_state, because this payload comes straight off the air.
+static void on_custom_command(const esp_zb_zcl_custom_cluster_command_message_t* message) {
+    if (message->info.cluster != LUMARY_CLUSTER_ID) return;
+    if (message->info.command.id != LUMARY_CMD_SET_EFFECT) {
+        log_w("Ignored unknown Lumary command 0x%02x", message->info.command.id);
+        return;
+    }
+    if (message->data.value == nullptr || message->data.size < 1) {
+        log_w("Ignored empty set-effect command");
+        return;
+    }
+    apply_effect(*(uint8_t*)message->data.value);
+}
+
 void zigbee_light_init() {
     light_state_init(&s_state);
     s_state.scene = scene_store_get_active();
@@ -48,6 +150,7 @@ void zigbee_light_init() {
     s_ep.onLightChangeRgb(on_light_change_rgb);
     s_ep.onLightChangeTemp(on_light_change_temp);
     s_ep.onIdentify(on_identify);
+    s_ep.onCustomClusterCommand(on_custom_command);
     s_ep.setManufacturerAndModel("Lumary", "LumaryBrainRevA");
 
     // Advertise colour temperature alongside colour, then publish the range the
@@ -87,11 +190,20 @@ bool zigbee_light_connected() {
 void zigbee_light_loop() {
     // The OTA query can only be issued once we're on a network. After this first
     // request the stack re-queries hourly on its own.
-    static bool s_ota_requested = false;
-    if (!s_ota_requested && Zigbee.connected()) {
+    static bool s_joined_once = false;
+    if (!s_joined_once && Zigbee.connected()) {
+        s_joined_once = true;
         s_ep.requestOTAUpdate();
-        s_ota_requested = true;
         log_i("Zigbee joined; OTA update requested");
+
+        // Tell the coordinator what we actually are, before anything asks. The
+        // light boots off with the stored effect, and the effect attribute is
+        // built during static init -- before setup() opens NVS -- so without
+        // this both are wrong: HA shows the pre-reboot on/off state, and a read
+        // reports effect 0 whatever is really running.
+        s_ep.publishState(s_state.on, s_state.level, s_state.scene);
+        log_i("Published state: on=%d level=%u effect=%u",
+              s_state.on, s_state.level, s_state.scene);
     }
 }
 
@@ -99,19 +211,30 @@ const LightState* zigbee_light_state() {
     return &s_state;
 }
 
-static void set_scene(uint8_t index) {
-    scene_store_set_active(index);
+// Runs on the Zigbee task. light_state_set_scene rejects an out-of-range index
+// outright, so re-read the state rather than trusting what was asked for --
+// otherwise a bad write would persist a scene the effect engine can't render.
+static void apply_effect(uint8_t index) {
+    light_state_set_scene(&s_state, index, EFFECT_COUNT);
+    if (s_state.scene != index) {
+        log_w("Ignored out-of-range effect %u", index);
+        return;
+    }
+    scene_store_set_active(s_state.scene);
+
+    // Mirror it back into the attribute so a read -- and therefore the Z2M/HA
+    // control -- reports what is actually running, including after a reboot or
+    // a selection made locally.
+    esp_zb_zcl_set_attribute_val(LIGHT_ENDPOINT, LUMARY_CLUSTER_ID,
+                                 ESP_ZB_ZCL_CLUSTER_SERVER_ROLE,
+                                 LUMARY_ATTR_EFFECT, &s_state.scene, false);
+
     zigbee_light_report();
+    log_i("Effect %u selected", s_state.scene);
 }
 
-void zigbee_light_next_scene() {
-    light_state_next_scene(&s_state, EFFECT_COUNT);
-    set_scene(s_state.scene);
-}
-
-void zigbee_light_prev_scene() {
-    light_state_prev_scene(&s_state, EFFECT_COUNT);
-    set_scene(s_state.scene);
+void zigbee_light_set_effect(uint8_t index) {
+    apply_effect(index);
 }
 
 void zigbee_light_report() {
