@@ -397,6 +397,23 @@ git commit -m "docs: phase 0 measurement template"
       **Caveat:** open-air bench at 23 °C. The fixture is a sealed ceiling can, so the deltas hold
       but the absolute temperatures will be higher — re-check during Task 6.4.
 
+### Effect engine — verified 2026-08-15
+
+Not a numbered task, but the effects had never run on hardware and are recorded here.
+Exercised via `BENCH_DEMO_MODE` (`main.cpp`), which cycles all eight from `kDefaultParams` at
+5 s each with the effect name on serial; four full cycles, zero errors or resets.
+
+**All eight render correctly**, including the two reworked blind after the outer strip turned
+out to have no white die: `nightlight`, which now mixes warm white from the RGB dice, and
+`chase`, which gained a div-by-zero guard. Both had been written against an assumption and
+never tested until now.
+
+This also runs the ring closer to full white than Home Assistant can reach — `warm_gradient`
+drives all three dice at brightness 200 — with no flicker or sag from the driver's 4.7 V rail.
+
+Still untested: **NVS scene storage**. The demo mode uses `kDefaultParams` directly and bypasses
+`scene_store` entirely, so saving and recalling scenes over Zigbee has never been exercised.
+
 ### Task 6.4: In-fixture drop-in test — [USER]
 
 - [ ] **Step 1:** Unplug the stock board, plug in the new board using the existing harnesses (no rewiring). Power the real driver. Expected: light works, both rings function.

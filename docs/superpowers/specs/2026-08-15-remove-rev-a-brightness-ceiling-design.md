@@ -92,6 +92,11 @@ Recorded here so Task 6.4 checks them rather than discovering them:
    first be exercised whenever scenes are used. Extrapolates to ~0.66 A against the 0.74 A rating;
    expected to be fine given the rail held 0.55 A without complaint and the trace has never warmed
    measurably, but **expected is not measured**.
+   **Partly addressed 2026-08-15:** the `BENCH_DEMO_MODE` walkthrough ran every effect from
+   `kDefaultParams`, including `warm_gradient` at brightness 200, which drives all three dice hard
+   and is the closest approach to full white the firmware can produce. It ran steady with no
+   flicker or sag. Qualitative only — the driver has no current readout, so this is an observation
+   rather than a measurement.
 3. **All measurements were open-air** at 23–29 °C. The fixture is a sealed ceiling can.
 
 ## 6. Testing
