@@ -44,6 +44,22 @@
 #define PWM_CHANNEL_WW        LEDC_CHANNEL_1
 
 // ── Zigbee ────────────────────────────────────────────
+// Effect selection rides a manufacturer-specific cluster, because nothing
+// standard can carry it: the Scenes cluster stores colour/level and knows
+// nothing about EffectParams, and the Identify trigger-effect command (which
+// is what Z2M's built-in "effect" dropdown drives) has no hook in the Arduino
+// library. Writing LUMARY_ATTR_EFFECT selects one of the eight effects.
+// See docs/superpowers/specs/2026-08-15-effect-selection-design.md.
+// Selection arrives as a COMMAND rather than an attribute write: ZigbeeColor
+// DimmableLight declares zbAttributeSet private, so a subclass can override it
+// but cannot delegate on/off, level and colour back to the base -- overriding
+// would silently break the light. onCustomClusterCommand is public and is the
+// library's intended extension point. The attribute is read-only state, kept in
+// step so Z2M/HA can display which effect is running.
+#define LUMARY_CLUSTER_ID       0xFC00   // manufacturer-specific range
+#define LUMARY_ATTR_EFFECT      0x0000   // u8, read-only: effect currently running
+#define LUMARY_CMD_SET_EFFECT   0x00     // payload: one u8, the effect index
+
 #define LIGHT_ENDPOINT        1
 #define ZB_MANUFACTURER_CODE  0x1001
 #define ZB_IMAGE_TYPE         0x0001

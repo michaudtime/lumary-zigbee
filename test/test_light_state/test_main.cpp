@@ -88,7 +88,7 @@ void test_setting_cct_renders_on_the_white_string(void) {
 void test_setting_cct_leaves_scene_mode(void) {
     LightState s;
     light_state_init(&s);
-    light_state_set_scene(&s, 4);
+    light_state_set_scene(&s, 4, EFFECT_COUNT);
     light_state_set_cct(&s, CCT_MIRED_WARM);
     TEST_ASSERT_EQUAL(MODE_COLOR, s.mode);        // white is a colour command
     TEST_ASSERT_EQUAL_UINT8(0, s.sat);            // ...with no saturation
@@ -116,9 +116,38 @@ void test_recalling_a_scene_switches_back_to_scene_mode(void) {
     LightState s;
     light_state_init(&s);
     light_state_set_color(&s, {255, 0, 0});
-    light_state_set_scene(&s, 3);
+    light_state_set_scene(&s, 3, EFFECT_COUNT);
     TEST_ASSERT_EQUAL(MODE_SCENE, s.mode);
     TEST_ASSERT_EQUAL_UINT8(3, s.scene);
+}
+
+// An out-of-range index arrives over the air from anything that can write the
+// effect attribute, so it must not be able to strand the light on a scene the
+// effect engine cannot render.
+void test_out_of_range_scene_is_ignored(void) {
+    LightState s;
+    light_state_init(&s);
+    light_state_set_scene(&s, 2, EFFECT_COUNT);
+    light_state_set_scene(&s, EFFECT_COUNT, EFFECT_COUNT);   // first invalid index
+    TEST_ASSERT_EQUAL_UINT8(2, s.scene);                     // unchanged
+    light_state_set_scene(&s, 250, EFFECT_COUNT);
+    TEST_ASSERT_EQUAL_UINT8(2, s.scene);
+}
+
+void test_out_of_range_scene_does_not_leave_colour_mode(void) {
+    LightState s;
+    light_state_init(&s);
+    light_state_set_color(&s, {255, 0, 0});
+    light_state_set_scene(&s, 99, EFFECT_COUNT);
+    TEST_ASSERT_EQUAL(MODE_COLOR, s.mode);   // rejected, so still a colour
+}
+
+void test_zero_scene_count_is_ignored(void) {
+    LightState s;
+    light_state_init(&s);
+    light_state_set_color(&s, {255, 0, 0});
+    light_state_set_scene(&s, 0, 0);
+    TEST_ASSERT_EQUAL(MODE_COLOR, s.mode);
 }
 
 // ── scene cycling (the switch's double-tap actions) ───────────────────────
@@ -176,7 +205,7 @@ void test_near_white_colour_renders_on_the_white_string(void) {
 void test_scene_mode_runs_the_stored_effect(void) {
     LightState s;
     light_state_init(&s);
-    light_state_set_scene(&s, 6);
+    light_state_set_scene(&s, 6, EFFECT_COUNT);
     const EffectParams scene = {EFFECT_CHASE, 40, 255, 200, 120};
     const EffectParams p = light_state_resolve(&s, &scene);
     TEST_ASSERT_EQUAL(EFFECT_CHASE, p.type);
@@ -220,6 +249,9 @@ int main(int, char**) {
     RUN_TEST(test_starts_in_scene_mode);
     RUN_TEST(test_setting_a_colour_switches_to_colour_mode);
     RUN_TEST(test_recalling_a_scene_switches_back_to_scene_mode);
+    RUN_TEST(test_out_of_range_scene_is_ignored);
+    RUN_TEST(test_out_of_range_scene_does_not_leave_colour_mode);
+    RUN_TEST(test_zero_scene_count_is_ignored);
     RUN_TEST(test_next_scene_advances_and_wraps);
     RUN_TEST(test_prev_scene_wraps_backwards);
     RUN_TEST(test_cycling_scenes_leaves_colour_mode);

@@ -19,10 +19,15 @@ void zigbee_light_loop();
 // Live state, updated from Zigbee callbacks.
 const LightState* zigbee_light_state();
 
-// Scene selection. Exposed so a hub automation (or a future local button) can
-// step through the stored scenes; both persist the new index to NVS.
-void zigbee_light_next_scene();
-void zigbee_light_prev_scene();
+// Selects one of the eight effects and persists it to NVS. Normally driven from
+// the coordinator writing LUMARY_ATTR_EFFECT; exposed for a future local button.
+// Out-of-range indices are ignored, not clamped.
+//
+// Stepping (the switch's double-tap) deliberately lives in the hub automation,
+// which reads the current effect and writes (n +/- 1) mod EFFECT_COUNT. There is
+// no next/prev here because the Inovelli's multi-tap events go to the
+// coordinator rather than to a bound light, so a hub is in the loop regardless.
+void zigbee_light_set_effect(uint8_t index);
 
 // Mirrors the current state back to the coordinator after a local change, so
 // Home Assistant / Z2M don't show stale values.

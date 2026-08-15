@@ -104,19 +104,25 @@ inline void light_state_set_cct(LightState* s, uint16_t mireds) {
     s->mode = MODE_COLOR;
 }
 
-inline void light_state_set_scene(LightState* s, uint8_t index) {
+// Selecting a scene returns the light to MODE_SCENE. The index arrives over the
+// air from anything that can write the effect attribute, so it is validated
+// here rather than at the Zigbee adapter: an out-of-range value is ignored
+// outright, leaving both the scene and the current mode untouched. Silently
+// clamping instead would strand the light on a scene nobody asked for.
+inline void light_state_set_scene(LightState* s, uint8_t index, uint8_t scene_count) {
+    if (scene_count == 0 || index >= scene_count) return;
     s->scene = index;
     s->mode  = MODE_SCENE;
 }
 
 inline void light_state_next_scene(LightState* s, uint8_t scene_count) {
     if (scene_count == 0) return;
-    light_state_set_scene(s, uint8_t((s->scene + 1) % scene_count));
+    light_state_set_scene(s, uint8_t((s->scene + 1) % scene_count), scene_count);
 }
 
 inline void light_state_prev_scene(LightState* s, uint8_t scene_count) {
     if (scene_count == 0) return;
-    light_state_set_scene(s, uint8_t((s->scene + scene_count - 1) % scene_count));
+    light_state_set_scene(s, uint8_t((s->scene + scene_count - 1) % scene_count), scene_count);
 }
 
 // Combines the live state with the stored parameters of the active scene to
