@@ -135,6 +135,16 @@ void zigbee_light_loop() {
         s_ep.requestOTAUpdate();
         s_ota_requested = true;
         log_i("Zigbee joined; OTA update requested");
+
+        // The effect attribute is built during static init, before setup() opens
+        // NVS, so it cannot be seeded from the stored scene there -- it starts at
+        // 0 no matter what is actually running. Publish the real value now that
+        // both NVS and the stack are up, otherwise a read after a reboot reports
+        // effect 0 while the fixture renders whatever was persisted.
+        esp_zb_zcl_set_attribute_val(LIGHT_ENDPOINT, LUMARY_CLUSTER_ID,
+                                     ESP_ZB_ZCL_CLUSTER_SERVER_ROLE,
+                                     LUMARY_ATTR_EFFECT, &s_state.scene, false);
+        log_i("Published running effect %u", s_state.scene);
     }
 }
 
