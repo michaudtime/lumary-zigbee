@@ -47,10 +47,82 @@ Rails: `+36V` = 36.63 V constant-current (380 mA), `+4V7` = 4.7 V logic/ring, `G
     why Q1/Q2 stay near ambient by comparison. Unremarkable for the part, and identical to what
     the stock controller produced since the driver's 380 mA CC output is unchanged. Installed it
     bolts to the aluminium can and is heatsinked better than on a bench.
-  - **Still unmeasured: the 0.2 mm `+4V7` trace.** The ring rail was disconnected throughout this
-    test, so the trace carried nothing. It is the constraint that sets `MAX_BRIGHTNESS`, and now
-    that a thermal camera is on hand, imaging it with the ring lit is the direct evidence needed
-    to decide whether the ceiling of 24 can rise.
+
+### `+4V7` trace characterisation — MEASURED 2026-08-15
+
+Two separate runs, kept separate rather than merged into one table. The pixels' thermal
+self-limiting (see Run 1) means readings taken at different strip temperatures are not
+directly comparable, so combining them would average away the very effect that matters.
+
+#### Run 1
+
+Ring fed from a current-limited bench supply (4.7 V, 0.9 A) with the 36 V side disconnected;
+`MAX_BRIGHTNESS` temporarily raised to 200; colour held at saturation 40% (`rgb 255,154,154`,
+≈73% of full-white current, since `sat`=0 routes to the white string and cannot light the ring).
+
+| Brightness | Rail current | Trace temperature |
+|---|---|---|
+| 24 (today's ceiling) | 0.119 A | no rise detectable |
+| 60 | 0.236 A | none |
+| 100 | 0.346 A | none |
+| 140 | 0.462 A | none |
+| 180 | 0.431 A ← *lower* | none |
+| 140 (repeat, later) | **0.400 A** vs 0.462 A first time | none |
+
+**Trace: no measurable heating anywhere in the usable range.** Predicted rise at 0.46 A is only
+~4 °C (I² against the 0.74 A / 10 °C design point), which is near a thermal camera's noise floor
+for a 0.2 mm trace under solder mask, so this is consistent with the model rather than a
+refutation of it. The trace is not the binding constraint it was assumed to be.
+
+**Series resistance:** 4.70 V at the supply vs **4.49 V at the ring** under 0.431 A → **≈0.49 Ω**
+total for trace + `Q3` + flying leads + joints. The trace alone accounts for ~0.19 Ω
+(77 mm of 0.2 mm, 1 oz). 4.49 V is still ample for the pixels, so droop did **not** limit current.
+
+**The pixels self-limit thermally.** Repeating brightness 140 after several minutes gave 0.400 A
+against 0.462 A when first measured, a 13% fall, with the strip at 36 °C (ambient 23.3 °C). These
+parts set their per-die current from an internal reference with a negative tempco, so current
+falls as they warm. Consequences:
+- **Worst case is a cold start at full brightness**, not sustained running. Any current budget must
+  be taken from cold.
+- Every figure in the table understates cold current by an unknown amount, since each was taken at
+  a different strip temperature.
+
+**Implication for `MAX_BRIGHTNESS`:** at brightness 140 — nearly 6× today's ceiling — the ring drew
+0.46 A warm, and full white would be ≈0.63 A, still under the 0.74 A rating. A ceiling well above
+24 looks defensible on trace thermals alone. **Not yet acted on**, for two reasons: this was an
+open-air bench at 23 °C and the fixture is a sealed can, and the ring rail in service comes from the
+L-SD8E1 whose spare 4.7 V capacity is still unknown (see R3 above). Settle both in Task 6.4.
+
+#### Run 2 — swept to full scale
+
+Same rig later the same day, PSU limited to 0.8 A and `MAX_BRIGHTNESS` lifted to 255 so the sweep
+reaches the top of the scale. The strip was **already warm** entering this run, from Run 1 and from
+the Task 6.3 thermal hold, so by Run 1's own finding these figures sit *below* a cold-start
+equivalent.
+
+| Brightness | Rail current | Trace temperature |
+|---|---|---|
+| 24 (today's ceiling) | 0.120 A | no rise detectable |
+| 64 | 0.248 A | none |
+| 128 | 0.393 A | none |
+| 192 | 0.438 A | none |
+| **255 (full scale)** | **0.480 A** | **none** |
+
+- **Full brightness reached: 0.480 A** — the most the ring can draw at this colour — with still no
+  measurable trace heating.
+- **`J1` measured 4.74 V under full load**, i.e. no sag at the board's input. Taken with Run 1's
+  4.49 V at the ring, the ~0.25 V lost sits *between* `J1` and the strip — trace, `Q3`, flying
+  leads and hand-soldered joints — and none of it upstream of the board. The flying leads are a
+  bench artefact and would not exist in a properly connectorised build.
+- Current flattens above brightness ~128, consistent with Run 1's thermal self-limiting rather
+  than with any rail limitation.
+
+**Combined conclusion.** Across both runs the trace never showed measurable heating at any
+brightness up to full scale, and the largest current seen was 0.48 A against a 0.74 A rating. The
+0.2 mm trace is **not** what should be setting `MAX_BRIGHTNESS`. Still not acted on, and the
+reasons are now sharper: **cold-start current is higher than anything measured here and was never
+captured**, the bench is open air where the fixture is a sealed can, and the L-SD8E1's spare 4.7 V
+capacity remains unmeasured. All three belong to Task 6.4.
 
 ---
 
