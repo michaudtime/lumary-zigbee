@@ -372,7 +372,30 @@ git commit -m "docs: phase 0 measurement template"
       > below ~37 V, 6.3 must be run from the real L-SD8E1 driver instead.
       > The MCU can run from USB and the ring can stay dark for this task, so a single supply on
       > the 36 V rail is sufficient — 4.7 V is only needed when testing the ring.
-- [ ] **Step 2: Verify** measured leg current ≈ P0.5 `I_set`; low-side device temperature stable under 5 min sustained full-brightness. PASS/FAIL (thermal risk R1 gate).
+- [x] **Step 1** — **PASS** (2026-08-15). Run from the **real L-SD8E1**, not a bench supply: the
+      available PSU tops out at 30 V and cannot reach the string's ~36 V forward voltage at all.
+      The driver is the better article anyway, being genuinely CC. Setup was power box white →
+      `J1` middle (GND), blue → `J1` bottom (+36 V), **red 4.7 V left off** so the ring rail
+      stayed dead, module on USB. Both channels lit and both sweeps — CCT end to end, and
+      brightness down to zero — were smooth, with no steps, flicker or dropouts.
+      > **Watch the wire colours.** They mean different things on the two sides of the board:
+      > on the input side red/white/blue are 4.7 V / GND / 36 V, on the output side they are
+      > `5V+` / `CW-` / `DIM`. An hour was lost to "disconnect the red wire" being ambiguous.
+- [x] **Step 2: Verify** measured leg current ≈ P0.5 `I_set`; low-side device temperature stable
+      under 5 min sustained full-brightness. **PASS on thermals** (2026-08-15) — risk **R1 cleared**.
+      Worst case deliberately chosen: 2702 K puts `cct` = 0, so `Q2` carries the full 380 mA at
+      100% duty while `Q1` is off. Held 15 minutes, measured with a thermal camera:
+      | | Temp | Rise over 23.3 °C (74 °F) ambient |
+      |---|---|---|
+      | `Q2` at 380 mA, 100% duty | 37 °C | 13.7 °C |
+      | `U2` LDO — hottest point on the board | 40 °C | 16.7 °C |
+      At the predicted ~0.23 W that implies θJA ≈ 60 °C/W, far better than the ~250 °C/W a bare
+      SOT-23 sees in free air — the copper pour is doing the work. `U2` runs from USB here (5 V →
+      3.3 V); installed it is fed from 4.7 V and dissipates less.
+      **Not verified:** leg current was never metered in series, so P0.5's `I_set` is still taken
+      on trust from the driver's CC rating.
+      **Caveat:** open-air bench at 23 °C. The fixture is a sealed ceiling can, so the deltas hold
+      but the absolute temperatures will be higher — re-check during Task 6.4.
 
 ### Task 6.4: In-fixture drop-in test — [USER]
 

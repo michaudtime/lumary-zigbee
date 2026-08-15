@@ -34,6 +34,18 @@ Rails: `+36V` = 36.63 V constant-current (380 mA), `+4V7` = 4.7 V logic/ring, `G
 ### Inner white sink (from P0.5)
 - Headroom ≈ 0.6 V, sink current 380 mA → **≈ 0.23 W per channel**, one color full at a time.
 - **VERDICT: PASS**, trivial thermals (see Task 1.2).
+- **MEASURED 2026-08-15** (rev A on the real L-SD8E1, `Q2` at 380 mA/100% duty for 15 min,
+  thermal camera, 23.3 °C ambient, open air):
+  - `Q2` **37 °C** (Δ13.7 °C) → effective **θJA ≈ 60 °C/W**, against ~250 °C/W for a bare SOT-23
+    in free air. The copper pour around Q1/Q2 is carrying the heat as hoped.
+  - `U2` (LDO) **40 °C** (Δ16.7 °C) — the hottest point on the whole board, not the white sinks.
+    Measured from USB (5 V → 3.3 V); installed it runs from +4V7 and dissipates ~20% less.
+  - **Risk R1 cleared.** Caveat: open-air bench. The sealed ceiling can raises ambient, so the
+    deltas hold but absolutes will be higher — confirm in-fixture (plan Task 6.4).
+  - **Still unmeasured: the 0.2 mm `+4V7` trace.** The ring rail was disconnected throughout this
+    test, so the trace carried nothing. It is the constraint that sets `MAX_BRIGHTNESS`, and now
+    that a thermal camera is on hand, imaging it with the ring lit is the direct evidence needed
+    to decide whether the ceiling of 24 can rise.
 
 ---
 
