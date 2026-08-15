@@ -31,6 +31,66 @@ public:
         esp_zb_cluster_list_add_custom_cluster(_cluster_list, custom,
                                                ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);
     }
+
+    // Push the fixture's true state to the coordinator. Nothing else does this
+    // after a reboot, so Z2M keeps showing whatever it last saw -- typically
+    // "on" for a light that came back off, which it then reports to HA.
+    //
+    // Deliberately not built on setLightState()/setLightLevel(): those no-op
+    // when the value is unchanged (so at boot, where off == off, they would
+    // push nothing at all), and when the value HAS changed they re-enter our
+    // own light-changed callback, which would drag the light into MODE_COLOR.
+    // Writing the attributes and reporting them directly avoids both.
+    void publishState(bool on, uint8_t level, uint8_t effect) {
+        uint8_t on_val = on ? 1 : 0;
+        setAttr(ESP_ZB_ZCL_CLUSTER_ID_ON_OFF,
+                ESP_ZB_ZCL_ATTR_ON_OFF_ON_OFF_ID, &on_val);
+        setAttr(ESP_ZB_ZCL_CLUSTER_ID_LEVEL_CONTROL,
+                ESP_ZB_ZCL_ATTR_LEVEL_CONTROL_CURRENT_LEVEL_ID, &level);
+        setAttr(LUMARY_CLUSTER_ID, LUMARY_ATTR_EFFECT, &effect);
+
+        reportAttr(ESP_ZB_ZCL_CLUSTER_ID_ON_OFF,
+                   ESP_ZB_ZCL_ATTR_ON_OFF_ON_OFF_ID);
+        reportAttr(ESP_ZB_ZCL_CLUSTER_ID_LEVEL_CONTROL,
+                   ESP_ZB_ZCL_ATTR_LEVEL_CONTROL_CURRENT_LEVEL_ID);
+        // The effect attribute is deliberately NOT reported. esp_zb rejects it
+        // with ESP_ERR_NOT_SUPPORTED unless the attribute carries
+        // ESP_ZB_ZCL_ATTR_ACCESS_REPORTING -- and adding that flag to a custom
+        // cluster attribute makes Zigbee.begin() hang before it ever starts the
+        // stack (bisected on hardware 2026-08-15: with the flag, setup() reached
+        // "LED driver init ok" and never logged "Zigbee started"; without it,
+        // joined at 134 ms). The value is still written above, so a READ returns
+        // the truth, which is what the Z2M converter's convertGet uses.
+    }
+
+private:
+    void setAttr(uint16_t cluster, uint16_t attr, void* value) {
+        esp_zb_zcl_set_attribute_val(_endpoint, cluster,
+                                     ESP_ZB_ZCL_CLUSTER_SERVER_ROLE,
+                                     attr, value, false);
+    }
+
+    void reportAttr(uint16_t cluster, uint16_t attr) {
+        // Addressed at the coordinator explicitly rather than left to the
+        // binding table (ESP_ZB_APS_ADDR_MODE_DST_ADDR_ENDP_NOT_PRESENT, which
+        // is what the library's sensor endpoints use). This device was
+        // interviewed by Z2M under a generic definition before the external
+        // converter existed, so the bindings a sensor would rely on may never
+        // have been configured -- and a report sent into an empty binding table
+        // is dropped silently, which is exactly what was happening.
+        esp_zb_zcl_report_attr_cmd_t cmd = {};
+        cmd.zcl_basic_cmd.src_endpoint          = _endpoint;
+        cmd.zcl_basic_cmd.dst_endpoint          = 1;        // coordinator
+        cmd.zcl_basic_cmd.dst_addr_u.addr_short = 0x0000;   // coordinator
+        cmd.address_mode     = ESP_ZB_APS_ADDR_MODE_16_ENDP_PRESENT;
+        cmd.clusterID        = cluster;
+        cmd.attributeID      = attr;
+        cmd.direction        = ESP_ZB_ZCL_CMD_DIRECTION_TO_CLI;
+        cmd.manuf_specific   = 0x00U;
+        cmd.dis_default_resp = 0x00U;
+        cmd.manuf_code       = 0x0000U;
+        reportClusterAttribute(&cmd);
+    }
 };
 
 static LumaryLight s_ep(LIGHT_ENDPOINT);
@@ -130,21 +190,20 @@ bool zigbee_light_connected() {
 void zigbee_light_loop() {
     // The OTA query can only be issued once we're on a network. After this first
     // request the stack re-queries hourly on its own.
-    static bool s_ota_requested = false;
-    if (!s_ota_requested && Zigbee.connected()) {
+    static bool s_joined_once = false;
+    if (!s_joined_once && Zigbee.connected()) {
+        s_joined_once = true;
         s_ep.requestOTAUpdate();
-        s_ota_requested = true;
         log_i("Zigbee joined; OTA update requested");
 
-        // The effect attribute is built during static init, before setup() opens
-        // NVS, so it cannot be seeded from the stored scene there -- it starts at
-        // 0 no matter what is actually running. Publish the real value now that
-        // both NVS and the stack are up, otherwise a read after a reboot reports
-        // effect 0 while the fixture renders whatever was persisted.
-        esp_zb_zcl_set_attribute_val(LIGHT_ENDPOINT, LUMARY_CLUSTER_ID,
-                                     ESP_ZB_ZCL_CLUSTER_SERVER_ROLE,
-                                     LUMARY_ATTR_EFFECT, &s_state.scene, false);
-        log_i("Published running effect %u", s_state.scene);
+        // Tell the coordinator what we actually are, before anything asks. The
+        // light boots off with the stored effect, and the effect attribute is
+        // built during static init -- before setup() opens NVS -- so without
+        // this both are wrong: HA shows the pre-reboot on/off state, and a read
+        // reports effect 0 whatever is really running.
+        s_ep.publishState(s_state.on, s_state.level, s_state.scene);
+        log_i("Published state: on=%d level=%u effect=%u",
+              s_state.on, s_state.level, s_state.scene);
     }
 }
 
