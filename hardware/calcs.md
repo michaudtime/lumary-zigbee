@@ -117,12 +117,49 @@ equivalent.
 - Current flattens above brightness ~128, consistent with Run 1's thermal self-limiting rather
   than with any rail limitation.
 
-**Combined conclusion.** Across both runs the trace never showed measurable heating at any
-brightness up to full scale, and the largest current seen was 0.48 A against a 0.74 A rating. The
-0.2 mm trace is **not** what should be setting `MAX_BRIGHTNESS`. Still not acted on, and the
-reasons are now sharper: **cold-start current is higher than anything measured here and was never
-captured**, the bench is open air where the fixture is a sealed can, and the L-SD8E1's spare 4.7 V
-capacity remains unmeasured. All three belong to Task 6.4.
+#### Run 3 — cold start at full brightness
+
+Run to settle the one thing Runs 1 and 2 could not: whether a cold strip draws more than a warm
+one, which would make every earlier figure an underestimate. Strip cooled to **30 °C against a
+29 °C background** — a genuine cold start, within a degree of ambient. (Ambient itself had drifted
+from 23.3 °C that morning to 29 °C by mid-afternoon.) Brightness 255, saturation 40%, as before.
+
+| Moment | Rail current | Strip temp |
+|---|---|---|
+| Peak, instant of turn-on | **0.480 A** | 30 °C |
+| 30 s | 0.480 A | — |
+| 2 min | 0.480 A | 34 °C |
+
+**No cold-start peak, and no decay.** Current held at 0.480 A across a 30 → 34 °C rise, and it is
+the same figure Run 2 measured on an already-warm strip. Highly reproducible and, over this range,
+insensitive to thermal state.
+
+**This does not reproduce Run 1's 13% self-limiting**, and re-reading those numbers the first
+reading looks like the outlier rather than the second:
+
+| | Current |
+|---|---|
+| Run 1, brightness 140, first reading | 0.462 A |
+| Run 1, brightness 140, repeat | **0.400 A** |
+| Run 2, brightness 128 | 0.393 A |
+| Run 2, brightness 192 | 0.438 A |
+
+The Run 1 *repeat* falls neatly on the Run 2 curve between brightness 128 and 192; the *first*
+reading is the one that fits nothing. Settling time or a mis-set brightness is a likelier
+explanation than a thermal droop that Run 3 cannot reproduce at all. Treat the negative-tempco
+conclusion as **not supported** — though note Run 3 only spans 30 → 34 °C, so a much larger
+excursion (a sealed can at full output) has still never been tested.
+
+**Combined conclusion.** Across three runs the trace never showed measurable heating at any
+brightness up to full scale, and the largest current ever seen was **0.480 A against a 0.74 A
+rating** — reproducible cold or warm. Full *white* extrapolates to ~0.66 A (÷0.73), still under
+the rating, though that scaling is unverified and is probably an over-estimate given how hard the
+current saturates with brightness. The 0.2 mm trace is **not** what should be setting
+`MAX_BRIGHTNESS`.
+
+Still not acted on, but only one reason now survives: **the L-SD8E1's spare 4.7 V capacity is
+unmeasured.** Every figure here came from a bench PSU, while in service that rail must carry the
+ring *and* the module. Settle it in Task 6.4, along with sealed-can ambient.
 
 ---
 
