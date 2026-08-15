@@ -2,7 +2,8 @@
 build/
 .history/
 *.kicad_prl
-~*.lck          # KiCad lock files, present only while the project is open
+# KiCad lock files, present only while the project is open
+~*.lck
 *.ota
 *.bin
 *.obj
