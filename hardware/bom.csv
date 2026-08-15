@@ -1,0 +1,33 @@
+Designator,Qty,Comment/Value,Footprint,LCSC,Status,Notes
+U1,1,ESP32-H2-MINI-1-N4,MINI-1 LGA module,C18203134,CONFIRMED,MCU+Zigbee radio; 4MB flash; PCB antenna (non-U variant)
+U2,1,ME6211C33M5G-N (3.3V LDO),SOT-23-5,C82942,CONFIRMED,From diode-OR of +4V7/USB; 260mV dropout @200mA
+U3,1,74AHCT1G125 (buffer/level shift),SOT-23-5,VERIFY,VERIFY,"3.3->4.7V ring data; want AHCT (VIH=2V). Fallback 74AHC1G125GW C85397 (AHC, marginal)"
+U4,1,USBLC6-2SC6 (USB ESD),SOT-23-6,C7519,CONFIRMED,ESD on USB D+/D-/VBUS
+Q1,1,N-MOSFET >=60V logic-level (CW sink),SOT-23,VERIFY,VERIFY,"Switches CW- low side; candidate Nexperia PMV120ENEAR (60V 2.1A). Gate from GPIO2"
+Q2,1,N-MOSFET >=60V logic-level (WW sink),SOT-23,VERIFY,VERIFY,"Switches WW- low side; same PN as Q1. Gate from GPIO3"
+Q3,1,AO3401A (P-MOSFET rev-polarity),SOT-23,C15127,CONFIRMED,Reverse-polarity block on +4V7 input
+D1,1,B5819W Schottky (4V7 diode-OR),SOD-123,VERIFY,VERIFY,+4V7 -> LDO_IN
+D2,1,B5819W Schottky (USB diode-OR),SOD-123,VERIFY,VERIFY,USB VBUS -> LDO_IN (bench flash)
+D3,1,SMAJ5.0A TVS,SMA,VERIFY,VERIFY,Transient clamp on +4V7 input
+J1,1,JST-PH 2.0mm 3-pin (power-in),B3B-PH-K-S TH,VERIFY,VERIFY,GND/36V/4V7 in; polarized; parallel solder pads on same nets
+J2,1,PicoBlade 1.25mm 7-pos (CN1 out),1.25mm 7P TH/SMD,VERIFY,VERIFY,To LED module; 6 populated per P0.3 pinout
+J3,1,TYPE-C-31-M-12 (USB-C),USB-C 16P SMD,C165948,CONFIRMED,Native USB + bench 5V
+SW1,1,Tact switch (BOOT/IO9),SMD 2-pin,VERIFY,VERIFY,Bench download-mode
+SW2,1,Tact switch (EN/reset),SMD 2-pin,VERIFY,VERIFY,Bench reset
+C1,1,10uF 50V bulk (+36V rail),0805,VERIFY,VERIFY,Absorbs switch inrush; mirrors stock 4.7uF/50V
+C2,1,10uF (LDO out +3V3),0603,VERIFY,VERIFY,LDO output cap
+C3,1,1uF (LDO in),0603,VERIFY,VERIFY,LDO input cap
+C4,1,10uF (+4V7 bulk),0603,VERIFY,VERIFY,Ring rail bulk
+C5,1,10uF (module bulk 3V3),0603,VERIFY,VERIFY,ESP32-H2 bulk decoupling
+C6,1,100nF (module 3V3),0402,VERIFY,VERIFY,ESP32-H2 HF decoupling (close to pin)
+C7,1,100nF (buffer U3),0402,VERIFY,VERIFY,U3 decoupling
+C8,1,1uF (EN RC),0402,VERIFY,VERIFY,EN power-on delay
+R1,1,100R (Q1 gate),0402,VERIFY,VERIFY,GPIO2 -> Q1 gate
+R2,1,100R (Q2 gate),0402,VERIFY,VERIFY,GPIO3 -> Q2 gate
+R3,1,100k (Q1 gate pulldown),0402,VERIFY,VERIFY,Hold Q1 off at boot
+R4,1,100k (Q2 gate pulldown),0402,VERIFY,VERIFY,Hold Q2 off at boot
+R5,1,200R (ring data series),0402,VERIFY,VERIFY,U3 out -> CN1.DIM damping
+R6,1,10k (EN pullup),0402,VERIFY,VERIFY,EN -> 3V3
+R7,1,5.1k (USB CC1),0402,VERIFY,VERIFY,USB-C CC1 pulldown
+R8,1,5.1k (USB CC2),0402,VERIFY,VERIFY,USB-C CC2 pulldown
+R9,1,100k (Q3 gate ref),0402,VERIFY,VERIFY,Reverse-polarity P-FET gate -> GND
