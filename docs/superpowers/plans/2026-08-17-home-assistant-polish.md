@@ -1,7 +1,8 @@
 # Home Assistant polish — backlog
 
 **Date:** 2026-08-17
-**Status:** item 1 implemented (PR #3, unverified on hardware); the rest are open
+**Status:** items 1 and 2 implemented and **verified on hardware** (PR #3, bench-tested
+2026-08-17 against the fixture at `0x744dbdfffe6b575f`); item 9 decided; the rest are open
 
 What it takes to make the fixture read as a finished product in Home Assistant rather than a
 working prototype. Written after auditing what HA actually sees today, so each item records the
@@ -31,6 +32,25 @@ keeping:
   no handler for. HA had a dead effects dropdown the whole time.
 - **Z2M's HA discovery unions every enum expose named `effect`** into one `effect_list`, so a
   second one cannot simply be added alongside — the stock one has to be switched off.
+
+Bench-verified 2026-08-17. Before, the light entity carried the dead Identify list:
+
+```
+effect_list: [blink, breathe, okay, channel_change,
+              finish_effect, stop_effect, colorloop, stop_colorloop]
+```
+
+After deploying the converter it carries the real one, and `select.*_effect_select` and
+`select.*_power_on_behavior` are both gone:
+
+```
+effect_list: [none, static_white, static_color, warm_gradient,
+              color_gradient, breathing, color_cycle, chase, nightlight]
+```
+
+`light.turn_on(effect: chase)` from HA reaches the firmware as `apply_effect(): Effect 6 selected`,
+and setting `color_temp_kelvin: 4000` afterwards drops `effect` to `none` — so `tzColorClearsEffect`
+behaves on real hardware, not just against the stubs.
 
 ## 2. Power-on behaviour
 
