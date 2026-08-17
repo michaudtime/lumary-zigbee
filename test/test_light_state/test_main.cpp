@@ -150,6 +150,94 @@ void test_zero_scene_count_is_ignored(void) {
     TEST_ASSERT_EQUAL(MODE_COLOR, s.mode);
 }
 
+// ── the effect value reported to the coordinator ──────────────────────────
+// Home Assistant's effect list has no null member, so "no effect running" is
+// carried as LIGHT_EFFECT_NONE rather than being absent.
+
+void test_scene_mode_reports_the_running_effect(void) {
+    LightState s;
+    light_state_init(&s);
+    light_state_set_scene(&s, 5, EFFECT_COUNT);
+    TEST_ASSERT_EQUAL_UINT8(5, light_state_effect_value(&s));
+}
+
+void test_colour_mode_reports_no_effect(void) {
+    LightState s;
+    light_state_init(&s);
+    light_state_set_scene(&s, 5, EFFECT_COUNT);
+    light_state_set_color(&s, {255, 0, 0});
+    TEST_ASSERT_EQUAL_UINT8(LIGHT_EFFECT_NONE, light_state_effect_value(&s));
+}
+
+void test_colour_temperature_also_reports_no_effect(void) {
+    LightState s;
+    light_state_init(&s);
+    light_state_set_scene(&s, 2, EFFECT_COUNT);
+    light_state_set_cct(&s, CCT_MIRED_WARM);
+    TEST_ASSERT_EQUAL_UINT8(LIGHT_EFFECT_NONE, light_state_effect_value(&s));
+}
+
+// The sentinel must never be mistakable for a selectable effect, or "none"
+// would round-trip as whatever effect happens to sit at that index.
+void test_none_is_not_a_valid_scene_index(void) {
+    TEST_ASSERT_GREATER_THAN_UINT8(EFFECT_COUNT, LIGHT_EFFECT_NONE);
+    LightState s;
+    light_state_init(&s);
+    light_state_set_scene(&s, LIGHT_EFFECT_NONE, EFFECT_COUNT);
+    TEST_ASSERT_EQUAL(MODE_SCENE, s.mode);       // rejected as out of range
+    TEST_ASSERT_EQUAL_UINT8(0, s.scene);
+}
+
+// ── clearing the effect ("none" in the dropdown) ──────────────────────────
+
+void test_clearing_the_scene_leaves_effect_mode(void) {
+    LightState s;
+    light_state_init(&s);
+    light_state_set_scene(&s, 6, EFFECT_COUNT);
+    light_state_clear_scene(&s);
+    TEST_ASSERT_EQUAL(MODE_COLOR, s.mode);
+    TEST_ASSERT_EQUAL_UINT8(LIGHT_EFFECT_NONE, light_state_effect_value(&s));
+}
+
+// "None" stops the effect; it does not change what colour is showing. Anything
+// else would make selecting it from Home Assistant a destructive act.
+void test_clearing_the_scene_keeps_the_colour(void) {
+    LightState s;
+    light_state_init(&s);
+    light_state_set_color(&s, {0, 255, 0});
+    const uint8_t hue = s.hue, sat = s.sat, cct = s.cct;
+    light_state_set_scene(&s, 4, EFFECT_COUNT);
+    light_state_clear_scene(&s);
+    TEST_ASSERT_EQUAL_UINT8(hue, s.hue);
+    TEST_ASSERT_EQUAL_UINT8(sat, s.sat);
+    TEST_ASSERT_EQUAL_UINT8(cct, s.cct);
+}
+
+// The stored index survives, so re-selecting the same effect -- and a reboot,
+// which comes back in MODE_SCENE -- returns to where it left off.
+void test_clearing_the_scene_remembers_the_index(void) {
+    LightState s;
+    light_state_init(&s);
+    light_state_set_scene(&s, 7, EFFECT_COUNT);
+    light_state_clear_scene(&s);
+    TEST_ASSERT_EQUAL_UINT8(7, s.scene);
+    light_state_set_scene(&s, 7, EFFECT_COUNT);
+    TEST_ASSERT_EQUAL(MODE_SCENE, s.mode);
+    TEST_ASSERT_EQUAL_UINT8(7, light_state_effect_value(&s));
+}
+
+void test_cleared_scene_renders_the_held_colour(void) {
+    LightState s;
+    light_state_init(&s);
+    s.level = 200;
+    light_state_set_color(&s, {0, 255, 0});
+    light_state_set_scene(&s, 4, EFFECT_COUNT);     // breathing takes over
+    light_state_clear_scene(&s);                    // ...and is stopped again
+    const EffectParams p = light_state_resolve(&s, &kDefaultParams[4]);
+    TEST_ASSERT_EQUAL(EFFECT_STATIC_COLOR, p.type);
+    TEST_ASSERT_EQUAL_UINT8(85, p.hue);             // still green
+}
+
 // ── scene cycling (the switch's double-tap actions) ───────────────────────
 
 void test_next_scene_advances_and_wraps(void) {
@@ -252,6 +340,14 @@ int main(int, char**) {
     RUN_TEST(test_out_of_range_scene_is_ignored);
     RUN_TEST(test_out_of_range_scene_does_not_leave_colour_mode);
     RUN_TEST(test_zero_scene_count_is_ignored);
+    RUN_TEST(test_scene_mode_reports_the_running_effect);
+    RUN_TEST(test_colour_mode_reports_no_effect);
+    RUN_TEST(test_colour_temperature_also_reports_no_effect);
+    RUN_TEST(test_none_is_not_a_valid_scene_index);
+    RUN_TEST(test_clearing_the_scene_leaves_effect_mode);
+    RUN_TEST(test_clearing_the_scene_keeps_the_colour);
+    RUN_TEST(test_clearing_the_scene_remembers_the_index);
+    RUN_TEST(test_cleared_scene_renders_the_held_colour);
     RUN_TEST(test_next_scene_advances_and_wraps);
     RUN_TEST(test_prev_scene_wraps_backwards);
     RUN_TEST(test_cycling_scenes_leaves_colour_mode);

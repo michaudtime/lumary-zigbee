@@ -20,8 +20,12 @@ void zigbee_light_loop();
 const LightState* zigbee_light_state();
 
 // Selects one of the eight effects and persists it to NVS. Normally driven from
-// the coordinator writing LUMARY_ATTR_EFFECT; exposed for a future local button.
-// Out-of-range indices are ignored, not clamped.
+// the coordinator sending LUMARY_CMD_SET_EFFECT; exposed for a future local
+// button. Out-of-range indices are ignored, not clamped.
+//
+// LIGHT_EFFECT_NONE stops the effect and holds the colour already on show,
+// which is what "none" in Home Assistant's effect dropdown sends. It is not
+// persisted -- a power cycle returns to the stored effect.
 //
 // Stepping (the switch's double-tap) deliberately lives in the hub automation,
 // which reads the current effect and writes (n +/- 1) mod EFFECT_COUNT. There is

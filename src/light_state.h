@@ -21,6 +21,14 @@
 #define CCT_MIRED_WARM 370   // 2700 K -- the 27K- (WW) string
 #define CCT_MIRED_COOL 154   // 6500 K -- the 65K- (CW) string
 
+// Reported in place of an effect index when the fixture is showing a plain
+// colour rather than running one of the built-in effects, and accepted as a
+// selection meaning "stop the effect, keep the colour". Home Assistant's effect
+// list has no null member -- an effect is just a string from `effect_list` --
+// so "no effect" has to be a value like any other. 0xFF cannot collide with a
+// real index: the scene table holds NVS_MAX_SCENES (16) entries at most.
+#define LIGHT_EFFECT_NONE 0xFF
+
 enum LightMode : uint8_t {
     MODE_SCENE,   // running a stored effect from the scene table
     MODE_COLOR,   // showing a colour set directly over Zigbee
@@ -113,6 +121,21 @@ inline void light_state_set_scene(LightState* s, uint8_t index, uint8_t scene_co
     if (scene_count == 0 || index >= scene_count) return;
     s->scene = index;
     s->mode  = MODE_SCENE;
+}
+
+// Leaves effect mode without disturbing the colour, which is what the fixture
+// carries on showing. The inverse of light_state_set_scene, and the firmware
+// side of picking "none" in Home Assistant's effect dropdown.
+inline void light_state_clear_scene(LightState* s) {
+    s->mode = MODE_COLOR;
+}
+
+// What the effect attribute should report: the running effect, or
+// LIGHT_EFFECT_NONE once a colour command has taken the fixture out of effect
+// mode. Without the second half the attribute goes on naming the last effect
+// selected, and Home Assistant shows "chase" over a static colour.
+inline uint8_t light_state_effect_value(const LightState* s) {
+    return s->mode == MODE_SCENE ? s->scene : LIGHT_EFFECT_NONE;
 }
 
 inline void light_state_next_scene(LightState* s, uint8_t scene_count) {
