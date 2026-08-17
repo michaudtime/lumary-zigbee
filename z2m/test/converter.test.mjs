@@ -81,6 +81,33 @@ await test('light() colorTemp.startup is off (no StartUpColorTemperature either)
     assert.equal(lightArgs.colorTemp.startup, false);
 });
 
+// ── identify ──────────────────────────────────────────────────────────────
+// The commissioning button. Verified against zigbee-herdsman-converters
+// 26.90.0: m.identify() exposes an enum named `identify`, not `effect`, so it
+// cannot be unioned into the light's effect_list the way the stock Identify
+// trigger-effects were.
+
+await test('the converter asks for identify', () => {
+    assert.ok(calls.find((c) => c.fn === 'identify'), 'm.identify() was never called');
+});
+
+await test('identify does not contribute a second `effect` expose', () => {
+    // Collect exposes from both the static array and all extend entries.
+    // extend entries' exposes may be absent, an array, or a function.
+    const allExposes = [...(def.exposes ?? [])];
+    for (const entry of def.extend ?? []) {
+        let exposes = entry.exposes;
+        if (typeof exposes === 'function') {
+            exposes = exposes({}, {});
+        }
+        if (Array.isArray(exposes)) {
+            allExposes.push(...exposes);
+        }
+    }
+    const effects = allExposes.filter((x) => x.name === 'effect');
+    assert.equal(effects.length, 1, `expected 1 expose named 'effect', got ${effects.length}`);
+});
+
 // ── selecting an effect ───────────────────────────────────────────────────
 
 const tzEffect = def.toZigbee.find((c) => c.key.length === 1 && c.key[0] === 'effect');

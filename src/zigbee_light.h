@@ -36,3 +36,8 @@ void zigbee_light_set_effect(uint8_t index);
 // Mirrors the current state back to the coordinator after a local change, so
 // Home Assistant / Z2M don't show stale values.
 void zigbee_light_report();
+
+// Deadline (millis) until which the fixture should render the Identify blink.
+// The render loop compares it with identify_active(); a value equal to or
+// behind now means "not identifying".
+uint32_t zigbee_light_identify_until();

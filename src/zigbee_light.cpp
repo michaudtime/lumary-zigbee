@@ -2,10 +2,16 @@
 #include "config.h"
 #include "scene_store.h"
 #include "effect_params.h"
+#include "identify.h"
 #include <Arduino.h>
+#include <string.h>
 #include "Zigbee.h"
 
 static LightState s_state;
+
+// Written on the Zigbee task, read on the Arduino render task. A single
+// aligned 32-bit word needs no mutex, but the volatile is load-bearing.
+static volatile uint32_t s_identify_until = 0;
 
 static void apply_effect(uint8_t index);
 static void publish_effect_attr();
@@ -31,6 +37,9 @@ public:
                                               &effect);
         esp_zb_cluster_list_add_custom_cluster(_cluster_list, custom,
                                                ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);
+
+        addBasicStringAttr(ESP_ZB_ZCL_ATTR_BASIC_SW_BUILD_ID, FW_VERSION_STRING);
+        addBasicStringAttr(ESP_ZB_ZCL_ATTR_BASIC_DATE_CODE_ID, FW_DATE_CODE);
     }
 
     // Push the fixture's true state to the coordinator. Nothing else does this
@@ -65,6 +74,33 @@ public:
     }
 
 private:
+    // ZCL character strings are length-prefixed, not null-terminated: byte 0 is
+    // the length. Same encoding the base class does by hand for manufacturer
+    // and model. Without these two attributes HA's device page reads
+    // "Firmware: unknown" and the update card shows a bare integer.
+    void addBasicStringAttr(uint16_t attr_id, const char* value) {
+        char zcl[ZB_MAX_NAME_LENGTH + 2];
+        const size_t len = strlen(value);
+        if (len > ZB_MAX_NAME_LENGTH) {
+            log_e("Basic attr 0x%04x too long (%u)", attr_id, unsigned(len));
+            return;
+        }
+        zcl[0] = char(len);
+        memcpy(zcl + 1, value, len);
+        zcl[len + 1] = '\0';
+
+        esp_zb_attribute_list_t* basic = esp_zb_cluster_list_get_cluster(
+            _cluster_list, ESP_ZB_ZCL_CLUSTER_ID_BASIC, ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);
+        if (basic == nullptr) {
+            log_e("No basic cluster for attr 0x%04x", attr_id);
+            return;
+        }
+        const esp_err_t ret = esp_zb_basic_cluster_add_attr(basic, attr_id, (void*)zcl);
+        if (ret != ESP_OK) {
+            log_e("Failed to add basic attr 0x%04x: %s", attr_id, esp_err_to_name(ret));
+        }
+    }
+
     void setAttr(uint16_t cluster, uint16_t attr, void* value) {
         esp_zb_zcl_set_attribute_val(_endpoint, cluster,
                                      ESP_ZB_ZCL_CLUSTER_SERVER_ROLE,
@@ -129,7 +165,16 @@ static void on_light_change_temp(bool state, uint8_t level, uint16_t mireds) {
     if (was == MODE_SCENE) publish_effect_attr();
 }
 
+// Identify is an overlay: it does not touch LightState, so when the deadline
+// passes the fixture resumes whatever it was doing with no restore step.
+//
+// ZCL treats IdentifyTime = 0 as "stop identifying", which is how a
+// coordinator cancels. Encoding it as a deadline of now makes
+// identify_active() false immediately, rather than scheduling a zero-length
+// blink that would leave the ring lit for one frame.
 static void on_identify(uint16_t time) {
+    const uint32_t now = millis();
+    s_identify_until = (time == 0) ? now : now + uint32_t(time) * 1000;
     log_i("Zigbee identify for %us", time);
 }
 
@@ -263,4 +308,8 @@ void zigbee_light_set_effect(uint8_t index) {
 void zigbee_light_report() {
     s_ep.setLightState(s_state.on);
     s_ep.setLightLevel(s_state.level);
+}
+
+uint32_t zigbee_light_identify_until() {
+    return s_identify_until;
 }

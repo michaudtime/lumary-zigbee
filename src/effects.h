@@ -12,3 +12,10 @@ struct Effect {
 };
 
 extern const Effect kEffects[EFFECT_COUNT];
+
+// The Identify blink. Deliberately NOT a member of kEffects: that table is
+// positionally indexed by both Home Assistant's effect_list and the NVS scene
+// store, so adding identify there would put it in the effect dropdown and in
+// the scene table. It is an overlay the render loop draws instead of the
+// resolved effect, not something a user can select.
+void fx_identify(uint32_t elapsed_ms, CRGB* leds);

@@ -1,8 +1,8 @@
 # Home Assistant polish — backlog
 
 **Date:** 2026-08-17
-**Status:** items 1 and 2 implemented and **verified on hardware** (PR #3, bench-tested
-2026-08-17 against the fixture at `0x744dbdfffe6b575f`); item 9 decided; the rest are open
+**Status:** items 1, 2, 4 and 5 implemented and **verified on hardware** (bench-tested 2026-08-17
+against the fixture at `0x744dbdfffe6b575f`); item 9 decided; the rest are open
 
 What it takes to make the fixture read as a finished product in Home Assistant rather than a
 working prototype. Written after auditing what HA actually sees today, so each item records the
@@ -85,18 +85,60 @@ covers HA, the switch and bind-only operation at once, with no dependency on the
 
 Probably the single biggest perceived-quality item after gamma.
 
-## 4. Identify
+## 4. Identify — DONE, bench-verified 2026-08-17
 
-`on_identify()` in `src/zigbee_light.cpp` only logs. It receives the duration, so rendering a
-blink is small. Needs `m.identify()` in the converter for the button to exist at all.
+`on_identify()` only logged. Now a render-loop overlay: a deadline set on the Zigbee task, checked
+in `loop()`, drawing a blue ring blink with the white string dark. `LightState` is never touched, so
+the fixture resumes by itself with no restore path. `m.identify()` in the converter gives HA the
+button (`button.*_identify`). See `2026-08-17-identify-and-version-design.md`.
 
-Matters when commissioning several fixtures in one ceiling.
+Verified on the fixture: pressing Identify blinks the ring blue for the requested duration and stops
+on its own, and the light entity stays `off` throughout — the overlay really is invisible to state.
 
-## 5. Firmware version in HA
+**Finding worth keeping: `on_identify` fires once per second, not once.** The ZCL `IdentifyTime`
+attribute counts down and the Arduino callback fires on every change:
 
-Basic cluster `SWBuildID` (0x4000) and `DateCode` are unset, so the device page reads
-"Firmware: unknown" and the update card shows a bare integer. Also reconcile `ZB_FW_VERSION`
-(`0x01000000`) against `ZB_FW_VERSION_DL` (`0x01000001`) in `src/config.h` — they disagree.
+```
+on_identify(): Zigbee identify for 3s
+on_identify(): Zigbee identify for 2s
+on_identify(): Zigbee identify for 1s
+on_identify(): Zigbee identify for 0s
+```
+
+Each call recomputes `now + time * 1000`, and since `now` advances by the same second that `time`
+decrements, they all converge on one absolute deadline. The terminal `0` takes the ZCL "stop
+identifying" path and ends the blink exactly on time. That zero case was added for explicit
+cancellation from HA; it turns out to terminate *every* identify. Without it each press would
+over-run by a second.
+
+## 5. Firmware version in HA — DONE, bench-verified 2026-08-17
+
+`SWBuildID` (0x4000) and `DateCode` (0x0006) are now registered on the Basic cluster, and the
+version lives in one place: `src/version.h` derives `ZB_FW_VERSION`, `ZB_FW_VERSION_DL` and the
+human string from three components, so a release is one edit. The README's `--file-version` example
+contradicted its own instruction and now agrees.
+
+The two OTA constants were not in conflict after all. `ZB_FW_VERSION_DL` feeds
+`ota_upgrade_downloaded_file_ver`, a different attribute from the running `FileVersion`, and
+running/running+1 is Espressif's own Arduino OTA example pattern. Z2M decides updates from the
+*running* version, so it is not load-bearing; it keeps its exact value and merely stops being typed
+by hand. Full reasoning in `2026-08-17-identify-and-version-design.md` §1.3.
+
+Verified on the fixture — HA's device page reads `1.0.0`, and Z2M read both strings off the air:
+
+```
+swBuildId : '1.0.0'
+dateCode  : '20260817'
+```
+
+**Operational finding, and it applies to every fixture already in service: Z2M reads Basic cluster
+attributes only during device interview.** A fixture paired before this firmware keeps showing empty
+strings forever — a Z2M restart does not re-read them. This one showed `sw_version: null` until it
+was re-interviewed, after which the values appeared immediately.
+
+So rolling this out means: **newly paired fixtures just work; already-paired ones need a
+re-interview** (Z2M frontend, or `zigbee2mqtt/bridge/request/device/interview`). Worth remembering
+before concluding the firmware is broken on an existing fixture.
 
 ## 6. Gamma and the low end
 
@@ -162,6 +204,6 @@ contain it. Add an HA blueprint under `ha/` so it is a two-click install. Post-P
 
 ## Suggested order
 
-Cheap, independent, and most of the visible difference: **4, 5, 6, 3.**
-Then **2** and **8**.
-Then **9** (now decided: two endpoints), which unblocks **10** and shapes **7** and **11**.
+~~4, 5~~ done. Next, and most of the remaining visible difference: **6** then **3**.
+Then the second half of **2** (`StartUpOnOff` and friends) and **8**.
+Then **9** (decided: two endpoints), which unblocks **10** and shapes **7** and **11**.
