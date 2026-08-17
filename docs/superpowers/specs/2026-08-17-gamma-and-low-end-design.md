@@ -39,6 +39,17 @@ First input that produces any light at all:
 | CIE L\* @ 8-bit | 5 |
 | CIE L\* @ 12-bit | **1** |
 
+> **Correction (post-implementation review):** the "CIE L\* @ 8-bit" row and its "first non-zero
+> input: 5" describe the *table's* output, not the ring's drive value. The ring composes the table
+> through `scale8(val, scale) = (val * scale) >> 8` (`src/color.h`), where the table entry is the
+> `scale` argument. A table entry of 1 is a real, intended floor value, but `(255 * 1) >> 8 == 0` —
+> the `>> 8` throws it away for every channel below full value, and even at full value the whole
+> `kGamma8[b] == 1` band (`b` in 1..13) composes to zero. First non-zero *drive* on the ring is
+> therefore 14, not 5, with a naive `scale8` composition. The implementation avoids this by
+> composing with `scale_by_255` (divide by 255) instead of `scale8`'s shift, which is what actually
+> gets the ring to brightness 1. See `src/brightness.h`'s `scale_by_255` and the design correction in
+> §3.1 below.
+
 So the bottom of the slider is not dead because the curve is wrong. It is dead because **8 bits of
 output cannot represent a gamma-corrected low end**. Task 6.3 already swept the white string to zero
 duty with no steps, flicker or dropouts, so the hardware is not the limit — quantisation is.
@@ -125,6 +136,18 @@ A generator script under `scripts/` emits the tables, and the host test recomput
 **The floor is not a tuned constant.** `gamma12` already yields 2 at brightness 1, so it never
 triggers there. `gamma8` yields 0 for brightness 1–4 only, so a `max(1, …)` guard on non-zero input
 catches exactly those four — the ring's hardware limit, stated rather than chosen.
+
+> **Correction (post-implementation review):** `gamma8`/`kGamma8` return a *multiplier*, not a drive
+> value — composing them into a pixel channel still has to happen, and that composition matters. The
+> obvious composition, `scale8(val, scale) = (val * scale) >> 8`, turns a multiplier of 1 into a
+> drive of 0 for any channel value, silently discarding the very floor described above: `kGamma8[b]
+> == 1` for `b` in 1..13, so all thirteen of those inputs composed to zero via `scale8`, widening the
+> ring's dead zone instead of removing it (first light moved from brightness 2 to brightness 14).
+> `scale_brightness_gamma` in `src/brightness.h` therefore composes with `scale_by_255(v, s) =
+> (v * s) / 255` instead — ordinary integer division rather than a `>> 8` shift — so a multiplier of
+> 1 against a full-value channel yields 1, and the table's floor actually reaches the LED. The same
+> fix applies to `warm_white_gamma` (`src/brightness.h`), used by `fx_nightlight`, since
+> `color.h`'s `warm_white()` has the identical `scale8` exposure.
 
 ### 3.2 `config.h` and `led_driver`
 

@@ -12,6 +12,8 @@ Usage:  python scripts/gen-gamma-tables.py
 Then paste each block between the corresponding markers in src/brightness.h.
 """
 
+import math
+
 
 def cie(brightness, out_max):
     """CIE 1931 lightness. Returns 0 only for an input of 0."""
@@ -22,7 +24,13 @@ def cie(brightness, out_max):
         luminance = lightness / 903.3
     else:
         luminance = ((lightness + 16.0) / 116.0) ** 3
-    return max(1, round(out_max * luminance))
+    # math.floor(... + 0.5) rather than Python's round(): round() is
+    # banker's rounding (half-to-even), while the C reference in
+    # test/test_brightness uses lround() (half-away-from-zero). No exact
+    # ties exist today, so the tables agree either way, but a future
+    # regeneration (e.g. at a different out_max) could land on one and the
+    # two rounding modes would silently disagree.
+    return max(1, math.floor(out_max * luminance + 0.5))
 
 
 def emit(out_max, per_line, width):

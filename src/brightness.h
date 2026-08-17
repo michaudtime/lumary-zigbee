@@ -89,10 +89,31 @@ inline uint16_t gamma12(uint8_t brightness) {
     return kGamma12[brightness];
 }
 
+// gamma8() returns a MULTIPLIER (0..255), not a drive value. scale8's `>> 8`
+// turns a multiplier of 1 into zero output -- which would throw away the
+// table's `max(1, ...)` floor entirely (kGamma8[b] == 1 for b in 1..13, and
+// (255 * 1) >> 8 == 0). Dividing by 255 instead lets that floor survive
+// composition: a multiplier of 1 against a full 255 channel yields 1, not 0.
+inline uint8_t scale_by_255(uint8_t v, uint8_t s) {
+    return uint8_t((uint16_t(v) * s) / 255);
+}
+
 // Curve the brightness, then scale the colour by it linearly, so the pixel's
 // hue and saturation survive dimming unchanged.
 inline CRGB scale_brightness_gamma(CRGB c, uint8_t brightness) {
-    return scale_brightness(c, gamma8(brightness));
+    const uint8_t g = gamma8(brightness);
+    return { scale_by_255(c.r, g), scale_by_255(c.g, g), scale_by_255(c.b, g) };
+}
+
+// Gamma-aware equivalent of color.h's warm_white(): mixes the same fixed
+// {255, 169, 87} ratio, but through scale_by_255 instead of scale8 so the
+// ring's low-end floor survives here too. fx_nightlight uses this instead of
+// warm_white(gamma8(...)) -- routing a gamma'd level through plain
+// warm_white() (which uses scale8) would reintroduce the >>8 bug on the one
+// effect that mixes warm white from the ring's RGB dice.
+inline CRGB warm_white_gamma(uint8_t brightness) {
+    const uint8_t g = gamma8(brightness);
+    return { scale_by_255(255, g), scale_by_255(169, g), scale_by_255(87, g) };
 }
 
 // 12-bit duties for the inner white string's two channels.
@@ -110,10 +131,16 @@ struct WhiteMix {
 // Divides by 255 rather than using scale8's `>> 8`: the shift maps a full 255
 // mix to 254/255 of the total, so pure warm would never quite reach full duty.
 // Same off-by-one that scale_level() in light_state.h works around.
+//
+// Rounds (`+127` before the `/255`) rather than truncating both legs: at
+// small `total` (e.g. level 1, total == 2) truncation collapses a genuine
+// 50/50 request into a fully-warm or fully-cool result, and the two
+// truncations don't cancel -- ww + cw can land under total. Rounding makes
+// the split sum to `total` exactly.
 inline WhiteMix white_mix_gamma(uint8_t level, uint8_t cct) {
     const uint32_t total = gamma12(level);
     return {
-        uint16_t(total * (255u - cct) / 255u),
-        uint16_t(total * cct / 255u),
+        uint16_t((total * (255u - cct) + 127u) / 255u),
+        uint16_t((total * cct + 127u) / 255u),
     };
 }

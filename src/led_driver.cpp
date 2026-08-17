@@ -56,12 +56,12 @@ void led_driver_show(const CRGB* leds, uint16_t count) {
 }
 
 void led_driver_set_cw(uint16_t duty) {
-    ledc_set_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_CW, duty);
+    ledc_set_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_CW, duty > PWM_DUTY_MAX ? PWM_DUTY_MAX : duty);
     ledc_update_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_CW);
 }
 
 void led_driver_set_ww(uint16_t duty) {
-    ledc_set_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_WW, duty);
+    ledc_set_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_WW, duty > PWM_DUTY_MAX ? PWM_DUTY_MAX : duty);
     ledc_update_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_WW);
 }
 

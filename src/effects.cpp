@@ -103,7 +103,11 @@ static void fx_nightlight(uint32_t, const EffectParams& p, CRGB* leds, bool on) 
     // These pixels have no white die, so mix a warm white from the RGB dice.
     // The curve goes on the level, not on the mixed colour -- warm_white()
     // scales fixed ratios, and curving its output would shift them.
-    const CRGB c = on ? warm_white(gamma8(p.brightness)) : CRGB{};
+    // warm_white_gamma() (not warm_white(gamma8(...))): warm_white() mixes
+    // through color.h's scale8, whose >>8 zeroes out the low-end floor that
+    // gamma8() bakes in (see brightness.h). warm_white_gamma() mixes the same
+    // ratio through scale_by_255 instead, so the floor survives here too.
+    const CRGB c = on ? warm_white_gamma(p.brightness) : CRGB{};
     for (int i = 0; i < RING_NUM_LEDS; i++) leds[i] = c;
     white_off();
 }

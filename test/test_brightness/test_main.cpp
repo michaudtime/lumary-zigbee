@@ -61,6 +61,27 @@ void test_no_nonzero_brightness_goes_dark(void) {
     }
 }
 
+// The property that actually matters: the LUT floor must survive composition
+// into a pixel drive value. This is the regression test for the Critical bug
+// found in review -- gamma8() returns a MULTIPLIER, and scale8's `>> 8` turns
+// a multiplier of 1 (kGamma8[1..13]) into zero output, silently discarding
+// the floor above and leaving the ring dark for HA brightness 1-13.
+void test_no_nonzero_brightness_darkens_the_ring(void) {
+    for (int b = 1; b < 256; b++) {
+        const CRGB out = scale_brightness_gamma(CRGB{255, 255, 255}, (uint8_t)b);
+        TEST_ASSERT_GREATER_THAN_UINT8(0, out.r);
+    }
+}
+
+// Same exposure on the path fx_nightlight uses to mix warm white from the
+// ring's RGB dice.
+void test_no_nonzero_brightness_darkens_warm_white(void) {
+    for (int b = 1; b < 256; b++) {
+        const CRGB out = warm_white_gamma((uint8_t)b);
+        TEST_ASSERT_GREATER_THAN_UINT8(0, out.r);
+    }
+}
+
 // ── the CW/WW split holds colour temperature ──────────────────────────────
 // Applying the curve per-leg instead of to the total would turn a 2.98:1 mix
 // into 10.83:1, so the fixture would drift warm as it dimmed.
@@ -71,8 +92,9 @@ void test_white_mix_conserves_the_total(void) {
             const WhiteMix w = white_mix_gamma((uint8_t)level, (uint8_t)cct);
             const uint32_t total = gamma12((uint8_t)level);
             const uint32_t sum   = (uint32_t)w.ww + w.cw;
-            TEST_ASSERT_TRUE(sum <= total);
-            TEST_ASSERT_TRUE(sum + 2 >= total);
+            // white_mix_gamma rounds (`+127`) rather than truncating both
+            // legs, so the split sums to `total` exactly -- no more slack.
+            TEST_ASSERT_EQUAL_UINT32(total, sum);
         }
     }
 }
@@ -108,12 +130,28 @@ void test_white_mix_is_dark_when_off(void) {
     TEST_ASSERT_EQUAL_UINT16(0, w.cw);
 }
 
+// Nothing previously asserted the white string's floor across the full
+// (level, cct) grid -- test_white_mix_is_dark_when_off only covers level 0.
+// It currently holds only because gamma12(1) == 2 and the two truncations
+// happen not to zero both legs at once; a later edit to white_mix_gamma
+// (e.g. a measured hardware floor) could break it silently without this.
+void test_white_mix_is_never_fully_dark_when_on(void) {
+    for (int l = 1; l < 256; l++)
+        for (int c = 0; c < 256; c++) {
+            const WhiteMix w = white_mix_gamma((uint8_t)l, (uint8_t)c);
+            TEST_ASSERT_GREATER_THAN_UINT32(0, (uint32_t)w.ww + w.cw);
+        }
+}
+
 // ── the ring keeps its colour while dimming ───────────────────────────────
 // Guards against someone "simplifying" this into per-channel gamma later.
 
 void test_scale_brightness_gamma_preserves_channel_ratios(void) {
     const CRGB source = {255, 169, 87};        // the warm_white() mix
-    for (int b = 16; b < 256; b += 5) {
+    // Starts at b = 1 (not 16): b = 1..13 is exactly the band the Critical
+    // review finding broke (kGamma8[b] == 1 collapsed to zero drive through
+    // scale8's >>8). Starting past it would have hidden the regression.
+    for (int b = 1; b < 256; b += 1) {
         const CRGB out = scale_brightness_gamma(source, (uint8_t)b);
         TEST_ASSERT_TRUE(labs((long)out.r * source.g - (long)out.g * source.r) < 255);
         TEST_ASSERT_TRUE(labs((long)out.g * source.b - (long)out.b * source.g) < 255);
@@ -123,7 +161,9 @@ void test_scale_brightness_gamma_preserves_channel_ratios(void) {
 void test_scale_brightness_gamma_endpoints(void) {
     const CRGB source = {255, 169, 87};
     const CRGB full   = scale_brightness_gamma(source, 255);
-    TEST_ASSERT_EQUAL_UINT8(254, full.r);      // scale8 maps 255 -> 254
+    // scale_by_255 (not scale8's `>> 8`) means a full 255 multiplier maps a
+    // full 255 channel to exactly 255, not 254 -- the endpoint is now exact.
+    TEST_ASSERT_EQUAL_UINT8(255, full.r);
     const CRGB dark   = scale_brightness_gamma(source, 0);
     TEST_ASSERT_EQUAL_UINT8(0, dark.r);
     TEST_ASSERT_EQUAL_UINT8(0, dark.g);
@@ -137,10 +177,13 @@ int main(int, char**) {
     RUN_TEST(test_both_curves_are_monotonic);
     RUN_TEST(test_endpoints_are_exact);
     RUN_TEST(test_no_nonzero_brightness_goes_dark);
+    RUN_TEST(test_no_nonzero_brightness_darkens_the_ring);
+    RUN_TEST(test_no_nonzero_brightness_darkens_warm_white);
     RUN_TEST(test_white_mix_conserves_the_total);
     RUN_TEST(test_white_mix_holds_the_ratio);
     RUN_TEST(test_white_mix_endpoints_are_pure);
     RUN_TEST(test_white_mix_is_dark_when_off);
+    RUN_TEST(test_white_mix_is_never_fully_dark_when_on);
     RUN_TEST(test_scale_brightness_gamma_preserves_channel_ratios);
     RUN_TEST(test_scale_brightness_gamma_endpoints);
     return UNITY_END();
