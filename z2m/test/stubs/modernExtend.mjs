@@ -11,3 +11,8 @@ export const deviceAddCustomCluster = (name, definition) => {
     calls.push({fn: 'deviceAddCustomCluster', name, definition});
     return {isModernExtend: true, kind: 'cluster', name, definition};
 };
+
+export const identify = (args) => {
+    calls.push({fn: 'identify', args});
+    return {isModernExtend: true, kind: 'identify', args};
+};

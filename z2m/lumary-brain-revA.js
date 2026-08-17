@@ -149,6 +149,11 @@ export default {
             effect: false,
             powerOnBehavior: false,
         }),
+        // The commissioning button: blinks the ring blue so you can tell which
+        // can in the ceiling you are looking at. Exposes an enum named
+        // `identify`, so unlike the stock Identify trigger-effects it cannot be
+        // folded into the light's effect_list.
+        m.identify(),
         m.deviceAddCustomCluster('lumary', {
             ID: 0xfc00,
             attributes: {

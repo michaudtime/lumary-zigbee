@@ -81,6 +81,21 @@ await test('light() colorTemp.startup is off (no StartUpColorTemperature either)
     assert.equal(lightArgs.colorTemp.startup, false);
 });
 
+// ── identify ──────────────────────────────────────────────────────────────
+// The commissioning button. Verified against zigbee-herdsman-converters
+// 26.90.0: m.identify() exposes an enum named `identify`, not `effect`, so it
+// cannot be unioned into the light's effect_list the way the stock Identify
+// trigger-effects were.
+
+await test('the converter asks for identify', () => {
+    assert.ok(calls.find((c) => c.fn === 'identify'), 'm.identify() was never called');
+});
+
+await test('identify does not contribute a second `effect` expose', () => {
+    const effects = def.exposes.filter((x) => x.name === 'effect');
+    assert.equal(effects.length, 1);
+});
+
 // ── selecting an effect ───────────────────────────────────────────────────
 
 const tzEffect = def.toZigbee.find((c) => c.key.length === 1 && c.key[0] === 'effect');
