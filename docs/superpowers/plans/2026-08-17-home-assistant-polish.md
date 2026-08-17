@@ -99,24 +99,38 @@ and `m.light()` defaults `configureReporting: false`. A `configure()` binding `g
 firmware report into the binding table normally, and would give HA self-healing after a dropped
 report — which it has none of today.
 
-## 9. One light entity or two
+## 9. One light entity or two — DECIDED: two
 
 `WHITE_SAT_THRESHOLD` in `src/light_state.h` makes colour and white mutually exclusive, so the
 fixture's "gradient auxiliary light" selling point — white downlight plus coloured accent ring at
 the same time — is unreachable.
 
-Options: keep one entity; add a second Zigbee endpoint so HA gets two light entities under one
-device ("Downlight" / "Accent Ring"); or a config toggle. Option two is what a HA user would expect
-from this hardware, but it ripples through the firmware, the converter and the Inovelli binding
-story.
+**Decision (2026-08-17): a second Zigbee endpoint, so HA gets two light entities under one device
+— "Downlight" and "Accent Ring".** This is what a HA user expects from this hardware, and it is the
+only option that actually reaches the capability the fixture was bought for. Cost accepted: it
+ripples through the firmware, the converter and the Inovelli binding story.
 
-**This is a product decision and it shapes the converter, so settle it before item 10.**
+What it implies, to be worked out when this is picked up:
+
+- **Firmware.** `LightState` currently models one fixture; it needs to carry downlight and ring
+  independently, and `WHITE_SAT_THRESHOLD` stops being a mode switch. `publishState()` and the
+  endpoint registration in `src/zigbee_light.cpp` both become per-endpoint.
+- **Converter.** Two `m.light()` extends with `endpointNames`, plus an endpoint map. The effect
+  cluster stays on endpoint 1 — effects are a whole-fixture concept, so `effect` should not be
+  duplicated per endpoint, or HA will union two identical lists.
+- **Inovelli binding.** The switch binds to one endpoint. Downlight is the sane default; the ring
+  then only follows via the hub automation, which is a behaviour change worth stating in the README.
+- **Item 7** gains a question: are effect parameters per-endpoint or global? Global, presumably,
+  for the same reason as `effect` itself.
+
+This unblocks item 10.
 
 ## 10. Upstream the converter
 
 Getting the definition into `zigbee-herdsman-converters` removes the
 `data/external_converters/` install step entirely — pair it and it works. Requires snake_case
-expose names (already the case) and a clean definition. Blocked on item 9.
+expose names (already the case) and a clean definition. Was blocked on item 9; now blocked only on
+item 9 being *implemented*, since the two-endpoint shape is what would be upstreamed.
 
 ## 11. Ship the switch blueprint
 
@@ -130,4 +144,4 @@ contain it. Add an HA blueprint under `ha/` so it is a two-click install. Post-P
 
 Cheap, independent, and most of the visible difference: **4, 5, 6, 3.**
 Then **2** and **8**.
-Then settle **9**, which unblocks **10** and shapes **7** and **11**.
+Then **9** (now decided: two endpoints), which unblocks **10** and shapes **7** and **11**.
