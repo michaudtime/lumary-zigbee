@@ -35,7 +35,7 @@ static void fx_static_white(uint32_t, const EffectParams& p, CRGB* leds, bool on
 }
 
 static void fx_static_color(uint32_t, const EffectParams& p, CRGB* leds, bool on) {
-    const CRGB c = on ? scale_brightness(hsv_to_rgb(p.hue, p.sat, 255), p.brightness)
+    const CRGB c = on ? scale_brightness_gamma(hsv_to_rgb(p.hue, p.sat, 255), p.brightness)
                       : CRGB{};
     for (int i = 0; i < RING_NUM_LEDS; i++) leds[i] = c;
     white_off();
@@ -60,7 +60,7 @@ static void fx_color_gradient(uint32_t elapsed_ms, const EffectParams& p, CRGB* 
     const uint8_t  offset = (elapsed_ms % period) * 256 / period;
     for (int i = 0; i < RING_NUM_LEDS; i++) {
         const uint8_t hue = p.hue + (i * 256 / RING_NUM_LEDS) + offset;
-        leds[i] = scale_brightness(hsv_to_rgb(hue, p.sat, 255), p.brightness);
+        leds[i] = scale_brightness_gamma(hsv_to_rgb(hue, p.sat, 255), p.brightness);
     }
     white_off();
 }
@@ -72,7 +72,7 @@ static void fx_breathing(uint32_t elapsed_ms, const EffectParams& p, CRGB* leds,
     const uint8_t  half   = (t < period / 2)
         ? uint8_t(t * 255 / (period / 2))
         : uint8_t(255 - (t - period / 2) * 255 / (period / 2));
-    const CRGB c = scale_brightness(hsv_to_rgb(p.hue, p.sat, 255), scale8(p.brightness, half));
+    const CRGB c = scale_brightness_gamma(hsv_to_rgb(p.hue, p.sat, 255), scale8(p.brightness, half));
     for (int i = 0; i < RING_NUM_LEDS; i++) leds[i] = c;
     white_off();
 }
@@ -81,7 +81,7 @@ static void fx_color_cycle(uint32_t elapsed_ms, const EffectParams& p, CRGB* led
     if (!on) { ring_off(leds); white_off(); return; }
     const uint32_t period = speed_to_period_ms(p.speed);
     const uint8_t  hue    = p.hue + uint8_t(elapsed_ms % period * 256 / period);
-    const CRGB     c      = scale_brightness(hsv_to_rgb(hue, p.sat, 255), p.brightness);
+    const CRGB     c      = scale_brightness_gamma(hsv_to_rgb(hue, p.sat, 255), p.brightness);
     for (int i = 0; i < RING_NUM_LEDS; i++) leds[i] = c;
     white_off();
 }
@@ -91,7 +91,7 @@ static void fx_chase(uint32_t elapsed_ms, const EffectParams& p, CRGB* leds, boo
     const uint32_t period = speed_to_period_ms(p.speed);
     const uint32_t step   = period / RING_NUM_LEDS;
     const uint32_t pos    = step ? (elapsed_ms / step) % RING_NUM_LEDS : 0;
-    const CRGB     c      = scale_brightness(hsv_to_rgb(p.hue, p.sat, 255), p.brightness);
+    const CRGB     c      = scale_brightness_gamma(hsv_to_rgb(p.hue, p.sat, 255), p.brightness);
     for (int i = 0; i < RING_NUM_LEDS; i++)
         leds[i] = (uint32_t(i) == pos) ? c : CRGB{};
     white_off();
@@ -99,7 +99,9 @@ static void fx_chase(uint32_t elapsed_ms, const EffectParams& p, CRGB* leds, boo
 
 static void fx_nightlight(uint32_t, const EffectParams& p, CRGB* leds, bool on) {
     // These pixels have no white die, so mix a warm white from the RGB dice.
-    const CRGB c = on ? warm_white(p.brightness) : CRGB{};
+    // The curve goes on the level, not on the mixed colour -- warm_white()
+    // scales fixed ratios, and curving its output would shift them.
+    const CRGB c = on ? warm_white(gamma8(p.brightness)) : CRGB{};
     for (int i = 0; i < RING_NUM_LEDS; i++) leds[i] = c;
     white_off();
 }
