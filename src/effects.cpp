@@ -1,5 +1,6 @@
 #include "effects.h"
 #include "led_driver.h"
+#include "identify.h"
 #include <string.h>
 
 // The fixture has two independent light sources: the addressable RGB outer ring
@@ -94,6 +95,16 @@ static void fx_chase(uint32_t elapsed_ms, const EffectParams& p, CRGB* leds, boo
 static void fx_nightlight(uint32_t, const EffectParams& p, CRGB* leds, bool on) {
     // These pixels have no white die, so mix a warm white from the RGB dice.
     const CRGB c = on ? warm_white(p.brightness) : CRGB{};
+    for (int i = 0; i < RING_NUM_LEDS; i++) leds[i] = c;
+    white_off();
+}
+
+// Blue was chosen because nothing else the fixture does looks like it: no
+// effect or colour setting produces a blinking blue ring, so there is no
+// ambiguity about which can in the ceiling is being identified.
+void fx_identify(uint32_t elapsed_ms, CRGB* leds) {
+    const bool lit = (elapsed_ms % IDENTIFY_BLINK_PERIOD_MS) < (IDENTIFY_BLINK_PERIOD_MS / 2);
+    const CRGB c   = lit ? CRGB{0, 0, 255} : CRGB{};
     for (int i = 0; i < RING_NUM_LEDS; i++) leds[i] = c;
     white_off();
 }

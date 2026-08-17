@@ -6,6 +6,7 @@
 #include "light_state.h"
 #include "scene_store.h"
 #include "zigbee_light.h"
+#include "identify.h"
 
 static CRGB leds[RING_NUM_LEDS];
 
@@ -90,6 +91,20 @@ void loop() {
 
     if (p.type >= EFFECT_COUNT) p.type = EFFECT_STATIC_WHITE;   // NVS corruption guard
 
-    kEffects[p.type].fn(now - effect_start, p, leds, on);
+    // Identify overrides whatever is running, without disturbing it: LightState
+    // is untouched, so when the deadline passes the next frame resumes normally.
+    // Bench demo mode compiles out zigbee_light_* entirely, so the accessor is
+    // not available to link against there.
+#if BENCH_DEMO_MODE
+    const bool identifying = false;
+#else
+    const bool identifying = identify_active(now, zigbee_light_identify_until());
+#endif
+
+    if (identifying) {
+        fx_identify(now, leds);
+    } else {
+        kEffects[p.type].fn(now - effect_start, p, leds, on);
+    }
     led_driver_show(leds, RING_NUM_LEDS);
 }

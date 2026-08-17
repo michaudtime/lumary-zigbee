@@ -2,11 +2,16 @@
 #include "config.h"
 #include "scene_store.h"
 #include "effect_params.h"
+#include "identify.h"
 #include <Arduino.h>
 #include <string.h>
 #include "Zigbee.h"
 
 static LightState s_state;
+
+// Written on the Zigbee task, read on the Arduino render task. A single
+// aligned 32-bit word needs no mutex, but the volatile is load-bearing.
+static volatile uint32_t s_identify_until = 0;
 
 static void apply_effect(uint8_t index);
 static void publish_effect_attr();
@@ -160,7 +165,16 @@ static void on_light_change_temp(bool state, uint8_t level, uint16_t mireds) {
     if (was == MODE_SCENE) publish_effect_attr();
 }
 
+// Identify is an overlay: it does not touch LightState, so when the deadline
+// passes the fixture resumes whatever it was doing with no restore step.
+//
+// ZCL treats IdentifyTime = 0 as "stop identifying", which is how a
+// coordinator cancels. Encoding it as a deadline of now makes
+// identify_active() false immediately, rather than scheduling a zero-length
+// blink that would leave the ring lit for one frame.
 static void on_identify(uint16_t time) {
+    const uint32_t now = millis();
+    s_identify_until = (time == 0) ? now : now + uint32_t(time) * 1000;
     log_i("Zigbee identify for %us", time);
 }
 
@@ -294,4 +308,8 @@ void zigbee_light_set_effect(uint8_t index) {
 void zigbee_light_report() {
     s_ep.setLightState(s_state.on);
     s_ep.setLightLevel(s_state.level);
+}
+
+uint32_t zigbee_light_identify_until() {
+    return s_identify_until;
 }
