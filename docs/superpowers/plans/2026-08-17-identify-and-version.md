@@ -499,19 +499,25 @@ with:
 ```cpp
     // Identify overrides whatever is running, without disturbing it: LightState
     // is untouched, so when the deadline passes the next frame resumes normally.
-#if !BENCH_DEMO_MODE
-    if (identify_active(now, zigbee_light_identify_until())) {
+    // Bench demo mode compiles out zigbee_light_* entirely, so the accessor is
+    // not available to link against there.
+#if BENCH_DEMO_MODE
+    const bool identifying = false;
+#else
+    const bool identifying = identify_active(now, zigbee_light_identify_until());
+#endif
+
+    if (identifying) {
         fx_identify(now, leds);
     } else {
         kEffects[p.type].fn(now - effect_start, p, leds, on);
     }
-#else
-    kEffects[p.type].fn(now - effect_start, p, leds, on);
-#endif
     led_driver_show(leds, RING_NUM_LEDS);
 ```
 
-The `BENCH_DEMO_MODE` guard is required: that mode compiles out `zigbee_light_*` entirely, so the accessor would not link.
+Only the `identifying` flag is conditional; the render call appears once. The
+`BENCH_DEMO_MODE` guard is required because that mode compiles out
+`zigbee_light_*`, so `zigbee_light_identify_until()` would not link.
 
 - [ ] **Step 5: Verify it builds and the host tests still pass**
 
