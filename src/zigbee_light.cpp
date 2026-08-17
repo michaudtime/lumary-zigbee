@@ -8,6 +8,7 @@
 static LightState s_state;
 
 static void apply_effect(uint8_t index);
+static void publish_effect_attr();
 
 // ZigbeeColorDimmableLight plus one manufacturer-specific cluster carrying the
 // effect index. The Arduino wrapper has no cluster-building API, so the
@@ -111,7 +112,9 @@ static void on_light_change_rgb(bool state, uint8_t r, uint8_t g, uint8_t b, uin
         s_last_r = r;
         s_last_g = g;
         s_last_b = b;
+        const LightMode was = s_state.mode;
         light_state_set_color(&s_state, CRGB{r, g, b});   // moves out of scene mode
+        if (was == MODE_SCENE) publish_effect_attr();     // ...so stop naming one
     }
 }
 
@@ -121,7 +124,9 @@ static void on_light_change_rgb(bool state, uint8_t r, uint8_t g, uint8_t b, uin
 static void on_light_change_temp(bool state, uint8_t level, uint16_t mireds) {
     s_state.on    = state;
     s_state.level = level;
+    const LightMode was = s_state.mode;
     light_state_set_cct(&s_state, mireds);
+    if (was == MODE_SCENE) publish_effect_attr();
 }
 
 static void on_identify(uint16_t time) {
@@ -201,9 +206,10 @@ void zigbee_light_loop() {
         // built during static init -- before setup() opens NVS -- so without
         // this both are wrong: HA shows the pre-reboot on/off state, and a read
         // reports effect 0 whatever is really running.
-        s_ep.publishState(s_state.on, s_state.level, s_state.scene);
+        const uint8_t effect = light_state_effect_value(&s_state);
+        s_ep.publishState(s_state.on, s_state.level, effect);
         log_i("Published state: on=%d level=%u effect=%u",
-              s_state.on, s_state.level, s_state.scene);
+              s_state.on, s_state.level, effect);
     }
 }
 
@@ -211,24 +217,41 @@ const LightState* zigbee_light_state() {
     return &s_state;
 }
 
+// Mirrors the running effect into the attribute so a read -- which is all the
+// coordinator can do, the attribute being unreportable -- returns the truth.
+// Called on transitions OUT of effect mode as well as into one: without that
+// half the attribute goes on naming the last effect while the ring holds a
+// static colour, and Home Assistant's dropdown shows an effect that stopped.
+static void publish_effect_attr() {
+    uint8_t value = light_state_effect_value(&s_state);
+    esp_zb_zcl_set_attribute_val(LIGHT_ENDPOINT, LUMARY_CLUSTER_ID,
+                                 ESP_ZB_ZCL_CLUSTER_SERVER_ROLE,
+                                 LUMARY_ATTR_EFFECT, &value, false);
+}
+
 // Runs on the Zigbee task. light_state_set_scene rejects an out-of-range index
 // outright, so re-read the state rather than trusting what was asked for --
 // otherwise a bad write would persist a scene the effect engine can't render.
 static void apply_effect(uint8_t index) {
+    if (index == LIGHT_EFFECT_NONE) {
+        // "None" in the Home Assistant dropdown: stop the effect and hold the
+        // colour already on show. Deliberately NOT persisted -- the stored
+        // active scene is what a power cycle should come back to, and
+        // light_state_init() boots in MODE_SCENE regardless, so persisting
+        // "none" would only make the two disagree.
+        light_state_clear_scene(&s_state);
+        publish_effect_attr();
+        log_i("Effect cleared; holding the current colour");
+        return;
+    }
+
     light_state_set_scene(&s_state, index, EFFECT_COUNT);
     if (s_state.scene != index) {
         log_w("Ignored out-of-range effect %u", index);
         return;
     }
     scene_store_set_active(s_state.scene);
-
-    // Mirror it back into the attribute so a read -- and therefore the Z2M/HA
-    // control -- reports what is actually running, including after a reboot or
-    // a selection made locally.
-    esp_zb_zcl_set_attribute_val(LIGHT_ENDPOINT, LUMARY_CLUSTER_ID,
-                                 ESP_ZB_ZCL_CLUSTER_SERVER_ROLE,
-                                 LUMARY_ATTR_EFFECT, &s_state.scene, false);
-
+    publish_effect_attr();
     zigbee_light_report();
     log_i("Effect %u selected", s_state.scene);
 }

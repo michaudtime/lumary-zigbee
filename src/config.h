@@ -59,6 +59,10 @@
 #define LUMARY_CLUSTER_ID       0xFC00   // manufacturer-specific range
 #define LUMARY_ATTR_EFFECT      0x0000   // u8, read-only: effect currently running
 #define LUMARY_CMD_SET_EFFECT   0x00     // payload: one u8, the effect index
+// ...or LIGHT_EFFECT_NONE (0xFF, src/light_state.h) to stop the effect and hold
+// the current colour. The attribute reports that same value whenever a colour
+// command has taken the fixture out of effect mode, so Home Assistant's effect
+// dropdown -- which has no null member -- always has something true to show.
 
 #define LIGHT_ENDPOINT        1
 #define ZB_MANUFACTURER_CODE  0x1001

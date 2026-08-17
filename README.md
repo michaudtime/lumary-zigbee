@@ -77,21 +77,44 @@ coordinator is down.
 
 Effect selection rides a **manufacturer-specific cluster (`0xFC00`)**, because nothing standard can
 carry it: the Scenes cluster stores colour and level but knows nothing about an effect type, and
-the Identify trigger-effects that Z2M's built-in `effect` dropdown drives have no hook in the
-Arduino Zigbee library.
+the Identify trigger-effects have no hook in the Arduino Zigbee library.
 
 Install [`z2m/lumary-brain-revA.js`](z2m/lumary-brain-revA.js) into Z2M's `data/external_converters/`
-and restart. That adds an **`effect_select`** control listing the eight effects by name. Without the
-converter the light still works normally — the effects are simply unreachable.
+and restart. Without the converter the light still works normally — the effects are simply
+unreachable.
 
-Setting a colour or colour temperature **exits the effect** and shows that colour instead;
-brightness continues to scale whatever effect is running.
+The converter exposes the effects as the light's **native Home Assistant effect list**, so they
+appear in the effect dropdown of the light card itself rather than as a separate entity:
 
-The selected effect persists across power cuts (NVS).
+```yaml
+service: light.turn_on
+target: {entity_id: light.lumary_kitchen}
+data: {effect: color_cycle}
+```
+
+That also means HA scene snapshots capture the running effect, and voice assistants can select one.
+The current effect reads back as `state_attr('light.lumary_kitchen', 'effect')`.
+
+| Value | Meaning |
+|---|---|
+| `static_white` … `nightlight` | One of the eight built-in effects, in `EffectType` order |
+| `none` | Not running an effect — showing a plain colour or colour temperature |
+
+Setting a colour or colour temperature **exits the effect** and shows that colour instead, which
+reads back as `none`. Selecting `none` does the same thing without changing the colour. Brightness
+continues to scale whatever effect is running.
+
+The selected effect persists across power cuts (NVS); `none` deliberately does not, so a power
+cycle comes back to the stored effect.
+
+> The Identify trigger-effects that Z2M's stock `effect` dropdown drives (`blink`, `breathe`,
+> `okay`, …) are **switched off** in the converter, along with `power_on_behavior`. Both are on by
+> default in `light()`, and this firmware implements neither — leaving them on would put controls in
+> the light card that quietly do nothing. See `effect: false` / `powerOnBehavior: false` there.
 
 > **Stepping through effects from the wall switch** is done by a hub automation, not by the light:
-> read the current `effect_select` and write the next one. The Inovelli's multi-tap events go to
-> the coordinator rather than to a bound light, so a hub is in the loop regardless.
+> read the current effect and set the next one. The Inovelli's multi-tap events go to the
+> coordinator rather than to a bound light, so a hub is in the loop regardless.
 
 Scene *storage* exists — 16 NVS slots, seeded with the defaults in `src/effect_params.h` — but
 editing them is **not implemented**. There is no Add Scene support; `scene_store_save()` is only
@@ -168,6 +191,10 @@ src/
   main.cpp          — Setup, loop, watchdog
 test/
   test_pixel_encode/ — Host unit tests for pixel encoding + color math
+  test_light_state/  — Host unit tests for the Zigbee -> fixture translation
+z2m/
+  lumary-brain-revA.js — Z2M external converter
+  test/             — Converter tests (stubbed, `node z2m/test/converter.test.mjs`)
 hardware/
   kicad/            — Board design (build_board.py generates the .kicad_pcb)
   bom.csv, calcs.md, schematic-nets.md
@@ -188,6 +215,14 @@ scripts\run-native-tests.bat
 > PlatformIO's `platform = native` expects a gcc toolchain; this script compiles the
 > same tests with the MSVC Build Tools that are installed instead. `pio test -e native`
 > works as-is on a machine with gcc.
+
+The Z2M converter has its own suite, covering the effect names, their wire indices and the
+exposes Home Assistant discovers from them. It stubs the `zigbee-herdsman-converters` imports,
+so it needs nothing installed but Node:
+
+```bash
+node z2m/test/converter.test.mjs
+```
 
 ## Status
 

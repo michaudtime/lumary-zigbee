@@ -104,6 +104,20 @@ An external converter exposing `effect` as an enum using the names already in `k
 This is the only piece needing maintenance across Z2M upgrades; the firmware side is ordinary
 Zigbee and is unaffected by them.
 
+> **Amended 2026-08-17.** The implementation shipped this expose as `effect_select`, not `effect`
+> as specified here, to avoid colliding with the Identify trigger-effects. That reasoning was
+> wrong twice over. The collision was never avoided — `m.light()` defaults to `effect: true` and
+> was already exposing those six trigger-effects, none of which the firmware handles, so Home
+> Assistant showed a dead dropdown either way. And the name is load-bearing: Z2M's HA discovery
+> collects every enum expose named `effect` into the light's `effect_list`, which is what puts the
+> control in the light card and makes `light.turn_on(effect:)`, scene capture and voice work. Under
+> any other name it can only ever be a `select` entity.
+>
+> Restored to `effect`, with `effect: false` and `powerOnBehavior: false` passed to `m.light()` so
+> it stops advertising controls the firmware does not implement. The enum also gained a `none`
+> member — HA's effect list has no null — carried on the air as `LIGHT_EFFECT_NONE` (0xFF), which
+> closes the gap in §6 where a colour command left the attribute naming an effect that had stopped.
+
 ## 5. Testing
 
 - **Host:** `light_state` tests covering `set_scene` returning `mode` to `MODE_SCENE`, and
@@ -118,7 +132,8 @@ Zigbee and is unaffected by them.
   selectable. Saving edited scenes, and `scene_store_save` gaining a caller, is a separate change.
 - **Gamma and per-channel white balance**, observed repeatedly on 2026-08-15.
 - **Reporting light state after reboot**, so HA does not show a light as on when it is physically
-  off.
+  off. *(Since implemented for on/off and level via `LumaryLight::publishState`; the effect
+  attribute cannot be reported at all, so the converter reads it back on `deviceAnnounce`.)*
 - The deferred power-cycle-reset / BLE-OTA-trigger rework (board spec §4.5).
 
 ## 7. Follow-up
