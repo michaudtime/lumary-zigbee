@@ -3,6 +3,7 @@
 #include "scene_store.h"
 #include "effect_params.h"
 #include <Arduino.h>
+#include <string.h>
 #include "Zigbee.h"
 
 static LightState s_state;
@@ -31,6 +32,9 @@ public:
                                               &effect);
         esp_zb_cluster_list_add_custom_cluster(_cluster_list, custom,
                                                ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);
+
+        addBasicStringAttr(ESP_ZB_ZCL_ATTR_BASIC_SW_BUILD_ID, FW_VERSION_STRING);
+        addBasicStringAttr(ESP_ZB_ZCL_ATTR_BASIC_DATE_CODE_ID, FW_DATE_CODE);
     }
 
     // Push the fixture's true state to the coordinator. Nothing else does this
@@ -65,6 +69,33 @@ public:
     }
 
 private:
+    // ZCL character strings are length-prefixed, not null-terminated: byte 0 is
+    // the length. Same encoding the base class does by hand for manufacturer
+    // and model. Without these two attributes HA's device page reads
+    // "Firmware: unknown" and the update card shows a bare integer.
+    void addBasicStringAttr(uint16_t attr_id, const char* value) {
+        char zcl[ZB_MAX_NAME_LENGTH + 2];
+        const size_t len = strlen(value);
+        if (len > ZB_MAX_NAME_LENGTH) {
+            log_e("Basic attr 0x%04x too long (%u)", attr_id, unsigned(len));
+            return;
+        }
+        zcl[0] = char(len);
+        memcpy(zcl + 1, value, len);
+        zcl[len + 1] = '\0';
+
+        esp_zb_attribute_list_t* basic = esp_zb_cluster_list_get_cluster(
+            _cluster_list, ESP_ZB_ZCL_CLUSTER_ID_BASIC, ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);
+        if (basic == nullptr) {
+            log_e("No basic cluster for attr 0x%04x", attr_id);
+            return;
+        }
+        const esp_err_t ret = esp_zb_basic_cluster_add_attr(basic, attr_id, (void*)zcl);
+        if (ret != ESP_OK) {
+            log_e("Failed to add basic attr 0x%04x: %s", attr_id, esp_err_to_name(ret));
+        }
+    }
+
     void setAttr(uint16_t cluster, uint16_t attr, void* value) {
         esp_zb_zcl_set_attribute_val(_endpoint, cluster,
                                      ESP_ZB_ZCL_CLUSTER_SERVER_ROLE,
