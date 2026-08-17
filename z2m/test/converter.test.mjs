@@ -74,6 +74,13 @@ await test('colour temperature range still matches CCT_MIRED_COOL/WARM', () => {
     assert.deepEqual(lightArgs.colorTemp.range, [154, 370]);
 });
 
+await test('light() colorTemp.startup is off (no StartUpColorTemperature either)', () => {
+    // Asking for colorTemp makes light() add a `color_temp_startup` control
+    // backed by Colour 0x4010, which the firmware answers with
+    // UNSUPPORTED_ATTRIBUTE -- observed in the Z2M log against the fixture.
+    assert.equal(lightArgs.colorTemp.startup, false);
+});
+
 // ── selecting an effect ───────────────────────────────────────────────────
 
 const tzEffect = def.toZigbee.find((c) => c.key.length === 1 && c.key[0] === 'effect');

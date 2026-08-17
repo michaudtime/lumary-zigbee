@@ -34,13 +34,25 @@ keeping:
 
 ## 2. Power-on behaviour
 
-`m.light()` also defaults to `powerOnBehavior: true`, so a `power_on_behavior` select was being
-exposed with no `StartUpOnOff` (OnOff 0x4003) behind it. PR #3 switches it off rather than leave a
-control that does nothing.
+`m.light()` defaults to `powerOnBehavior: true`, so a `power_on_behavior` select was being exposed
+with no `StartUpOnOff` (OnOff 0x4003) behind it. Asking for `colorTemp` separately adds a
+`color_temp_startup` number backed by `StartUpColorTemperature` (Colour 0x4010), which the firmware
+does not implement either. PR #3 switches both off rather than leave controls that do nothing
+(`powerOnBehavior: false`, `colorTemp.startup: false`).
+
+Both are confirmed against the fixture, not just inferred from the converter — the Z2M log has the
+device rejecting each one:
+
+```
+Publish 'set' 'power_on_behavior' to 'Overhead light test' failed:
+  'device does not support power on behaviour'
+Publish 'set' 'color_temp_startup' ... lightingColorCtrl.write({"startUpColorTemperature":370})
+  failed (Status 'UNSUPPORTED_ATTRIBUTE')
+```
 
 To implement properly: `StartUpOnOff` (0x4003), `StartUpCurrentLevel` (Level 0x4000),
-`StartUpColorTemperature` (Colour 0x4010), then re-enable it in the converter. These are standard
-attributes, but the Arduino wrapper may not surface them — likely needs the same raw
+`StartUpColorTemperature` (Colour 0x4010), then re-enable all three in the converter. These are
+standard attributes, but the Arduino wrapper may not surface them — likely needs the same raw
 `esp_zb_zcl_*` approach the custom cluster already uses, which is proven on this hardware.
 
 Worth doing: this is a ceiling can on a dumb wall switch, and it currently always boots off.

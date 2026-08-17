@@ -127,9 +127,24 @@ export default {
         //
         // `powerOnBehavior: false` for the same reason: light() exposes it by
         // default, and the firmware does not implement StartUpOnOff (0x4003)
-        // yet, so the control would be there and do nothing.
+        // yet, so the control would be there and do nothing. The Z2M log has
+        // this one confirmed from the bench:
+        //
+        //     Publish 'set' 'power_on_behavior' to 'Overhead light test'
+        //     failed: 'device does not support power on behaviour'
+        //
+        // `colorTemp.startup: false` is the same defect one layer down --
+        // asking for colorTemp at all makes light() add a `color_temp_startup`
+        // control backed by StartUpColorTemperature (Colour 0x4010), which the
+        // firmware does not implement either:
+        //
+        //     lightingColorCtrl.write({"startUpColorTemperature":370})
+        //     failed (Status 'UNSUPPORTED_ATTRIBUTE')
+        //
+        // Turning it off leaves `color_temp` itself untouched. All three come
+        // back on together when power-on behaviour is implemented properly.
         m.light({
-            colorTemp: {range: [154, 370]},
+            colorTemp: {range: [154, 370], startup: false},
             color: {modes: ['xy']},
             effect: false,
             powerOnBehavior: false,
