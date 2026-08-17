@@ -1,4 +1,5 @@
 #include "effects.h"
+#include "brightness.h"
 #include "led_driver.h"
 #include "identify.h"
 #include <string.h>
@@ -23,10 +24,14 @@ static void white_off() {
 
 static void fx_static_white(uint32_t, const EffectParams& p, CRGB* leds, bool on) {
     // Colour temperature rides on `hue`: 0 = fully warm, 255 = fully cool.
+    // The curve applies to the level, and the split that follows is linear --
+    // curving each leg separately would drag the colour temperature warm as the
+    // fixture dims. See brightness.h.
     const uint8_t level = on ? p.brightness : 0;
     ring_off(leds);
-    led_driver_set_ww(scale8(level, 255 - p.hue));
-    led_driver_set_cw(scale8(level, p.hue));
+    const WhiteMix w = white_mix_gamma(level, p.hue);
+    led_driver_set_ww(w.ww);
+    led_driver_set_cw(w.cw);
 }
 
 static void fx_static_color(uint32_t, const EffectParams& p, CRGB* leds, bool on) {

@@ -55,13 +55,13 @@ void led_driver_show(const CRGB* leds, uint16_t count) {
     spi_device_polling_transmit(s_spi, &t);
 }
 
-void led_driver_set_cw(uint8_t level) {
-    ledc_set_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_CW, level);
+void led_driver_set_cw(uint16_t duty) {
+    ledc_set_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_CW, duty);
     ledc_update_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_CW);
 }
 
-void led_driver_set_ww(uint8_t level) {
-    ledc_set_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_WW, level);
+void led_driver_set_ww(uint16_t duty) {
+    ledc_set_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_WW, duty);
     ledc_update_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_WW);
 }
 

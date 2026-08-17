@@ -39,8 +39,16 @@
 // only gates it. A CC supply's control loop can't track fast switching, so keep
 // the PWM slow enough for it to settle but above the flicker threshold.
 // Verify on the bench (Task 6.3) and adjust if low-end dimming shudders.
+//
+// 12-bit rather than 8-bit so a perceptually corrected low end has somewhere to
+// live: at 8 bits the CIE curve puts brightness 1..4 at duty 0, i.e. off. The
+// frequency is unchanged, so the driver sees the same switching rate it already
+// passed Task 6.3 with -- but minimum on-time drops from 3.9 us to 0.24 us, and
+// whether the driver responds at all down there is what the bench sweep checks.
+// 1 kHz from the 32 MHz XTAL allows up to ~14 bits, so 12 has margin.
 #define PWM_FREQ_HZ           1000
-#define PWM_RESOLUTION        LEDC_TIMER_8_BIT
+#define PWM_RESOLUTION        LEDC_TIMER_12_BIT
+#define PWM_DUTY_MAX          4095
 #define PWM_CHANNEL_CW        LEDC_CHANNEL_0
 #define PWM_CHANNEL_WW        LEDC_CHANNEL_1
 
