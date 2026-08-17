@@ -92,8 +92,20 @@ await test('the converter asks for identify', () => {
 });
 
 await test('identify does not contribute a second `effect` expose', () => {
-    const effects = def.exposes.filter((x) => x.name === 'effect');
-    assert.equal(effects.length, 1);
+    // Collect exposes from both the static array and all extend entries.
+    // extend entries' exposes may be absent, an array, or a function.
+    const allExposes = [...(def.exposes ?? [])];
+    for (const entry of def.extend ?? []) {
+        let exposes = entry.exposes;
+        if (typeof exposes === 'function') {
+            exposes = exposes({}, {});
+        }
+        if (Array.isArray(exposes)) {
+            allExposes.push(...exposes);
+        }
+    }
+    const effects = allExposes.filter((x) => x.name === 'effect');
+    assert.equal(effects.length, 1, `expected 1 expose named 'effect', got ${effects.length}`);
 });
 
 // ── selecting an effect ───────────────────────────────────────────────────
