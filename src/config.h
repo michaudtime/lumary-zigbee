@@ -1,6 +1,7 @@
 // lumary-zigbee/src/config.h
 #pragma once
 #include "driver/ledc.h"
+#include "version.h"
 
 // Target board: lumary-brain rev A (drop-in replacement for the stock
 // KOK-AH-A172C controller). See docs/superpowers/specs/2026-08-01-*.
@@ -68,11 +69,8 @@
 #define ZB_MANUFACTURER_CODE  0x1001
 #define ZB_IMAGE_TYPE         0x0001
 
-// OTA. Bump ZB_FW_VERSION for every release and pass the same value to
-// ota_image_tool.py as --file-version, or the coordinator will not offer the
-// update (it only pushes images numbered higher than the running one).
-#define ZB_FW_VERSION         0x01000000
-#define ZB_FW_VERSION_DL      0x01000001
+// ZB_FW_VERSION / ZB_FW_VERSION_DL are derived in version.h, included at the
+// top of this file -- it is ESP-IDF-free so the host tests can reach it.
 #define ZB_HW_VERSION         0x0001      // lumary-brain rev A
 
 // ── NVS ───────────────────────────────────────────────

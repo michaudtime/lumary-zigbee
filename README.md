@@ -131,8 +131,9 @@ permanently is a future change.
 
 The device registers an OTA client at startup and queries for an image once it
 joins, then hourly. The coordinator only offers images numbered **above** the
-running version, so `ZB_FW_VERSION` in `src/config.h` must be bumped and passed
-as `--file-version` below — if they disagree, the update silently never appears.
+running version, so the version block in `src/version.h` must be bumped and
+`ZB_FW_VERSION` passed as `--file-version` below — if they disagree, the update
+silently never appears.
 
 ```bash
 # Get the tool
@@ -146,7 +147,7 @@ pio run -e esp32h2
 python3 ota_image_tool.py create \
   --manufacturer-code 0x1001 \
   --image-type 0x0001 \
-  --file-version 0x01000001 \
+  --file-version 0x01000000 \
   --stack-version 2 \
   --header-string "LumaryZigbee" \
   .pio/build/esp32h2/firmware.bin \
