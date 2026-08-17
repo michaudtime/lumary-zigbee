@@ -46,10 +46,12 @@ static void fx_warm_gradient(uint32_t elapsed_ms, const EffectParams& p, CRGB* l
     const uint32_t period = speed_to_period_ms(p.speed);
     const uint8_t  offset = (elapsed_ms % period) * 256 / period;
     for (int i = 0; i < RING_NUM_LEDS; i++) {
-        const uint8_t pos  = (i * 256 / RING_NUM_LEDS + offset) & 0xFF;
-        const uint8_t warm = scale8(p.brightness, 255 - pos);
-        const uint8_t cool = scale8(p.brightness, pos);
-        leds[i] = {scale8(warm, 200), scale8(warm, 100), cool};
+        const uint8_t pos = (i * 256 / RING_NUM_LEDS + offset) & 0xFF;
+        // Blend the two ends at full intensity and curve once. Folding
+        // brightness into each end and curving them separately would distort
+        // the crossfade the same way it would distort colour temperature.
+        const CRGB c = blend(CRGB{200, 100, 0}, CRGB{0, 0, 255}, pos);
+        leds[i] = scale_brightness_gamma(c, p.brightness);
     }
     white_off();
 }
