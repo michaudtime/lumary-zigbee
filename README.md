@@ -140,7 +140,7 @@ silently never appears.
 curl -L -o ota_image_tool.py \
   https://raw.githubusercontent.com/espressif/esp-zigbee-sdk/main/tools/ota_image_tool.py
 
-# Build firmware (bump ZB_FW_VERSION in src/config.h first)
+# Build firmware (bump the version block in src/version.h first)
 pio run -e esp32h2
 
 # Wrap as OTA image -- --file-version must equal ZB_FW_VERSION
