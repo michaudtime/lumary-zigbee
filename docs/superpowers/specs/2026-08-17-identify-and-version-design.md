@@ -73,7 +73,7 @@ running a real upgrade against a fixture in a ceiling, and the upside is cosmeti
 |---|---|
 | Identify appearance | Ring blinks **blue**, white string **off** |
 | Identify architecture | Render-loop **overlay**, not a `LightState` mode |
-| Version source | One version block; `ZB_FW_VERSION`, `ZB_FW_VERSION_DL` and the string all derived |
+| Version source | One version block in a new `src/version.h`; `ZB_FW_VERSION`, `ZB_FW_VERSION_DL` and the string all derived |
 | `ZB_FW_VERSION_DL` | Stays `ZB_FW_VERSION + 1`, computed rather than typed |
 | `DateCode` | Explicit define, not build-date derived, to keep builds reproducible |
 
@@ -86,7 +86,12 @@ visually distinct indication.**
 
 ## 3. Version block
 
-`src/config.h` replaces the two hand-typed constants with:
+The block lives in a **new `src/version.h`**, not in `config.h`. `config.h` includes
+`driver/ledc.h`, which makes it impossible to include from a host test — the same reason
+`light_state.h` is deliberately kept free of ESP-IDF headers. `config.h` includes `version.h`, so
+every existing user of `ZB_FW_VERSION` is unaffected.
+
+`src/version.h`:
 
 ```c
 #define FW_VERSION_MAJOR  1
