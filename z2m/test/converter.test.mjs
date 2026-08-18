@@ -58,6 +58,13 @@ await test('effect expose is attached to the ring endpoint', () => {
     assert.equal(effect.endpoint, 'ring');
 });
 
+await test('effect expose property is postfixed to `effect_ring`', () => {
+    // withEndpoint('ring') rewrites `property` the same way real ZHC does
+    // (see stubs/exposes.mjs) -- this is the key Home Assistant actually
+    // reads, and the one fzEffect must publish under (item 2).
+    assert.equal(effect.property, 'effect_ring');
+});
+
 await test('the old effect_select expose is gone', () => {
     assert.equal(def.exposes.find((x) => x.name === 'effect_select'), undefined);
 });
@@ -90,8 +97,8 @@ await test('both lights switch off the dead stock controls', () => {
     }
 });
 
-await test('the endpoint map names both endpoints', () => {
-    assert.deepEqual(def.endpoint({}), {downlight: 1, ring: 2});
+await test('the endpoint map names both endpoints, with a default', () => {
+    assert.deepEqual(def.endpoint({}), {downlight: 1, ring: 2, default: 1});
     assert.equal(def.meta.multiEndpoint, true);
 });
 
@@ -163,16 +170,20 @@ await test('reading the effect reads the custom cluster attribute', async () => 
 
 const fz = def.fromZigbee.find((c) => c.cluster === 'lumary');
 
-await test('an effect report maps the index back to its name', () => {
-    assert.deepEqual(fz.convert({}, {data: {effect: 4}}), {effect: 'chase'});
+// Published under `effect_ring`, not `effect`: withEndpoint('ring') rewrites
+// the expose's property to that, and Home Assistant reads value_json under
+// the exact property name the expose declares (item 2).
+
+await test('an effect report maps the index back to its name, keyed `effect_ring`', () => {
+    assert.deepEqual(fz.convert({}, {data: {effect: 4}}), {effect_ring: 'chase'});
 });
 
-await test('0xFF reads back as `none`', () => {
-    assert.deepEqual(fz.convert({}, {data: {effect: 0xff}}), {effect: 'none'});
+await test('0xFF reads back as `none`, keyed `effect_ring`', () => {
+    assert.deepEqual(fz.convert({}, {data: {effect: 0xff}}), {effect_ring: 'none'});
 });
 
 await test('an unrecognised index passes through rather than becoming undefined', () => {
-    assert.deepEqual(fz.convert({}, {data: {effect: 99}}), {effect: 99});
+    assert.deepEqual(fz.convert({}, {data: {effect: 99}}), {effect_ring: 99});
 });
 
 await test('a report carrying no effect field is ignored', () => {
@@ -196,16 +207,20 @@ await test('...without dropping what the delegate returned', async () => {
     assert.equal(res.readAfterWriteTime, 100);
 });
 
-await test('setting a colour temperature does the same', async () => {
-    const res = await tzColor.convertSet({}, 'color_temp', 300, {});
-    assert.equal(res.state.effect, 'none');
-    assert.equal(res.state.color_temp, 300);
+// color_temp belongs to the downlight now, which has no effects, and the
+// firmware deliberately does not clear the ring's effect attribute on a
+// colour-temperature write -- so this converter must no longer claim that key
+// (item 3). Z2M dispatches convertSet/convertGet to a converter by matching
+// the key being set against `key`, so narrowing the list is what stops this
+// wrapper from being invoked for color_temp at all in production.
+await test('color_temp no longer clears the ring effect: only `color` is claimed', () => {
+    assert.deepEqual(tzColor.key, ['color']);
 });
 
 await test('colour reads still delegate', async () => {
     light_color_colortemp.lastGet = undefined;
-    await tzColor.convertGet({}, 'color_temp', {});
-    assert.equal(light_color_colortemp.lastGet, 'color_temp');
+    await tzColor.convertGet({}, 'color', {});
+    assert.equal(light_color_colortemp.lastGet, 'color');
 });
 
 // ── rejoin read-back ──────────────────────────────────────────────────────

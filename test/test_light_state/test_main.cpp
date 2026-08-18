@@ -155,11 +155,20 @@ void test_ring_out_of_range_scene_does_not_leave_colour_mode(void) {
     TEST_ASSERT_EQUAL(MODE_COLOR, r.mode);
 }
 
+// Starts from MODE_COLOR rather than the freshly-initialised MODE_SCENE, so a
+// call that is wrongly accepted (moving to MODE_SCENE) is distinguishable from
+// one that is correctly rejected (staying in MODE_COLOR). Against the
+// freshly-initialised default this test could not tell "rejected" from
+// "accepted a no-op" -- and with scene_count == 0, the second guard
+// (index >= scene_count) also rejects, so deleting the scene_count == 0 check
+// entirely would have left the old version of this test green.
 void test_ring_zero_scene_count_is_ignored(void) {
     RingState r;
     ring_state_init(&r);
+    ring_clear_scene(&r);
+    TEST_ASSERT_EQUAL(MODE_COLOR, r.mode);
     ring_set_scene(&r, 0, 0);
-    TEST_ASSERT_EQUAL(MODE_SCENE, r.mode);
+    TEST_ASSERT_EQUAL(MODE_COLOR, r.mode);
 }
 
 void test_ring_clearing_the_scene_leaves_effect_mode(void) {

@@ -130,6 +130,11 @@ public:
                                                ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);
     }
 
+    // publishState(bool, uint8_t) is inherited unchanged; this overload adds
+    // the effect attribute. Non-virtual overload resolution means the base
+    // two-argument version would otherwise be hidden here -- see item 7.
+    using LumaryEndpoint::publishState;
+
     void publishState(bool on, uint8_t level, uint8_t effect) {
         LumaryEndpoint::publishState(on, level);
         setAttr(LUMARY_CLUSTER_ID, LUMARY_ATTR_EFFECT, &effect);
@@ -162,6 +167,30 @@ static void on_downlight_change_temp(bool state, uint8_t level, uint16_t mireds)
     downlight_set_cct(&s_state.down, mireds);
 }
 
+// The library dispatches On/Off and Level writes through whichever colour-mode
+// callback is currently active (ZigbeeColorDimmableLight::lightChangedByMode()),
+// and the constructor defaults that mode to CURRENT_X_Y -- setLightColorCapabilities()
+// never touches it, and this endpoint only ever advertises COLOR_TEMP, so nothing
+// else flips it either. Without these two shims, on/off and level land on the
+// null RGB callback and get dropped silently until some colour-temperature
+// command switches the mode to TEMPERATURE -- which on endpoint 1 means the
+// wall switch does nothing after every power cycle, until someone touches the
+// CCT slider in Home Assistant. Both shims ignore the colour arguments: this
+// endpoint has no colour dice, so there is nothing there to act on.
+static void on_downlight_change_rgb(bool state, uint8_t /*r*/, uint8_t /*g*/, uint8_t /*b*/, uint8_t level) {
+    s_state.down.on    = state;
+    s_state.down.level = level;
+}
+
+// HSV callback carries (state, hue, saturation, value) -- no separate level
+// parameter; `value` doubles as the brightness/level component (see
+// ZigbeeColorDimmableLight.h). This mode is unreachable in practice, since the
+// downlight never advertises HUE_SATURATION, but it costs nothing to cover.
+static void on_downlight_change_hsv(bool state, uint8_t /*hue*/, uint8_t /*sat*/, uint8_t value) {
+    s_state.down.on    = state;
+    s_state.down.level = value;
+}
+
 // ── endpoint 2: the ring ──────────────────────────────────────────────────
 static void on_ring_change_rgb(bool state, uint8_t r, uint8_t g, uint8_t b, uint8_t level) {
     s_state.ring.on    = state;
@@ -172,6 +201,28 @@ static void on_ring_change_rgb(bool state, uint8_t r, uint8_t g, uint8_t b, uint
         s_ring_last_b = b;
         const LightMode was = s_state.ring.mode;
         ring_set_color(&s_state.ring, CRGB{r, g, b});   // moves out of scene mode
+        if (was == MODE_SCENE) publish_effect_attr();   // ...so stop naming one
+    }
+}
+
+// The ring advertises HUE_SATURATION as well as X_Y, so a scene recall, group
+// command, or a different coordinator can latch the colour mode to
+// HUE_SATURATION -- after which every On/Off and Level command would be
+// dropped the same way the downlight's were (item 1) unless this is
+// registered. RingState already stores hue/sat directly, so this sets them
+// without round-tripping through RGB the way on_ring_change_rgb has to.
+static uint8_t s_ring_last_hue = 0, s_ring_last_sat = 0;
+
+static void on_ring_change_hsv(bool state, uint8_t hue, uint8_t sat, uint8_t value) {
+    s_state.ring.on    = state;
+    s_state.ring.level = value;
+    if (hue != s_ring_last_hue || sat != s_ring_last_sat) {
+        s_ring_last_hue = hue;
+        s_ring_last_sat = sat;
+        const LightMode was = s_state.ring.mode;
+        s_state.ring.hue  = hue;
+        s_state.ring.sat  = sat;
+        s_state.ring.mode = MODE_COLOR;                 // moves out of scene mode
         if (was == MODE_SCENE) publish_effect_attr();   // ...so stop naming one
     }
 }
@@ -210,6 +261,10 @@ void zigbee_light_init() {
 
     // ── endpoint 1: downlight ──
     s_down.onLightChangeTemp(on_downlight_change_temp);
+    // Mode-agnostic shims so On/Off and Level are never dropped -- see the
+    // comment above on_downlight_change_rgb (item 1).
+    s_down.onLightChangeRgb(on_downlight_change_rgb);
+    s_down.onLightChangeHsv(on_downlight_change_hsv);
     s_down.onIdentify(on_identify);
     s_down.setManufacturerAndModel("Lumary", "LumaryBrainRevA");
     s_down.setLightColorCapabilities(ZIGBEE_COLOR_CAPABILITY_COLOR_TEMP);
@@ -229,6 +284,7 @@ void zigbee_light_init() {
     // No colour temperature: the ring has no white die, and advertising CCT
     // would put a control in Home Assistant that lies.
     s_ring.onLightChangeRgb(on_ring_change_rgb);
+    s_ring.onLightChangeHsv(on_ring_change_hsv);
     s_ring.onCustomClusterCommand(on_custom_command);
     s_ring.setManufacturerAndModel("Lumary", "LumaryBrainRevA");
     s_ring.setLightColorCapabilities(ZIGBEE_COLOR_CAPABILITY_HUE_SATURATION

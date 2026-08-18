@@ -6,7 +6,12 @@
 // The outer RGB ring's effects. Each fills the `leds` buffer and nothing else:
 // the inner CW/WW white string is a separate Zigbee endpoint and a separate
 // Home Assistant entity, rendered directly by the render loop, so no effect
-// touches it. That is why this file has no hardware dependency.
+// touches it -- this file no longer drives the white string. It is not free of
+// hardware headers, though: effects.h pulls in config.h for RING_NUM_LEDS,
+// and config.h includes driver/ledc.h, so this still cannot compile on the
+// host as-is (unlike pixel_encode.h, which is deliberately kept clean for
+// that). Moving RING_NUM_LEDS into a hardware-free header would fix that, but
+// is out of scope here.
 
 static uint32_t speed_to_period_ms(uint8_t speed) {
     return 200 + uint32_t(10000 - 200) * (255 - speed) / 255;

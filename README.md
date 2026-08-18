@@ -33,10 +33,12 @@ The external `L-SD8E1` driver supplies **36.63 V constant-current** (inner white
 | `light.<name>_ring` | 2 | on/off, brightness, xy colour, the six effects |
 
 > **Upgrading an already-paired fixture:** adding the second endpoint changes the device
-> descriptor, and Zigbee2MQTT caches endpoints from the interview. A fixture paired before this
-> firmware will show only the downlight until it is **re-interviewed** (Z2M frontend → device →
-> Re-interview, or publish to `zigbee2mqtt/bridge/request/device/interview`). Newly paired
-> fixtures just work.
+> descriptor, and Zigbee2MQTT caches endpoints from the interview, so an already-paired fixture
+> must be **re-interviewed** (Z2M frontend → device → Re-interview, or publish to
+> `zigbee2mqtt/bridge/request/device/interview`) before the ring entity works. This has not been
+> tested on hardware, so exactly what you'll see beforehand is unconfirmed either way -- expect
+> the ring entity to be missing entirely, or present but unresponsive, until the re-interview is
+> done. Newly paired fixtures just work.
 
 ### Wiring (rev A board)
 
@@ -157,6 +159,10 @@ permanently is a future change.
 
 ## OTA Updates
 
+> **Re-flashing a fixture that was already paired?** See "Upgrading an already-paired fixture"
+> above — after this update it needs a Z2M **re-interview** before the ring entity works, or the
+> upgrade will look broken even though it succeeded.
+
 **Primary:** Zigbee OTA via Zigbee2MQTT — drop `.ota` image in Z2M's `data/ota/` folder, update appears in HA dashboard.
 
 **Fallback:** Hold the BOOT button (GPIO 9) for 5 seconds — device enters BLE OTA mode, outer ring flashes blue, advertises as `LumaryOTA`.
@@ -189,6 +195,10 @@ python3 ota_image_tool.py create \
 ```
 
 ## Build & Flash
+
+> **Re-flashing a fixture that was already paired?** See "Upgrading an already-paired fixture"
+> above — after this update it needs a Z2M **re-interview** before the ring entity works, or the
+> upgrade will look broken even though it succeeded.
 
 > **Windows:** run `pio` from **PowerShell or cmd**, not Git Bash. This platform
 > version installs its toolchain via `idf_tools.py`, which aborts with

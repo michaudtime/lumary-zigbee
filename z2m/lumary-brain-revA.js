@@ -54,7 +54,20 @@ const fzEffect = {
     type: ['attributeReport', 'readResponse'],
     convert: (model, msg) => {
         if (msg.data.effect === undefined) return;
-        return {effect: nameFor(msg.data.effect) ?? msg.data.effect};
+        // The key must be `effect_ring`, not `effect`: the expose below is
+        // `.withEndpoint('ring')`, and real zigbee-herdsman-converters
+        // rewrites an endpoint-scoped expose's `property` from `effect` to
+        // `effect_${endpoint}` (the same rewrite postfixWithEndpointName does
+        // at read time). Home Assistant reads value_json.effect_ring, so
+        // returning `effect` here means every device-originated read --
+        // including the rejoin read below -- writes a property nothing
+        // consumes. Hardcoded rather than computed via
+        // postfixWithEndpointName: that helper resolves the endpoint name
+        // from msg.endpoint against the definition's endpoint map, which
+        // would need a much heavier stub to test, and this cluster only ever
+        // exists on the ring endpoint -- there is nothing to actually
+        // compute.
+        return {effect_ring: nameFor(msg.data.effect) ?? msg.data.effect};
     },
 };
 
@@ -85,8 +98,15 @@ const tzEffect = {
 // Definition-level toZigbee converters are matched ahead of extend-provided
 // ones and the first match wins, so this takes precedence over the one light()
 // installs -- which it then delegates to for the actual colour work.
+// Narrowed to `color` only: colour temperature now belongs to the Downlight
+// entity (endpoint 1), which has no effects at all, and the firmware
+// deliberately does not clear the ring's effect attribute on a colour-
+// temperature write (on_downlight_change_temp never calls
+// publish_effect_attr()). Keeping color_temp/color_temp_percent here would
+// make the converter report `effect: none` for the ring while an effect is
+// still running, just because someone changed the downlight's white balance.
 const tzColorClearsEffect = {
-    key: ['color', 'color_temp', 'color_temp_percent'],
+    key: ['color'],
     convertSet: async (entity, key, value, meta) => {
         const result = await tz.light_color_colortemp.convertSet(entity, key, value, meta);
         return {...result, state: {...result?.state, effect: 'none'}};
@@ -121,7 +141,7 @@ export default {
     // Two endpoints, two Home Assistant light entities under one device. The
     // downlight keeps endpoint 1 so existing switch bindings land on the main
     // light; the ring is the new endpoint 2.
-    endpoint: (device) => ({downlight: 1, ring: 2}),
+    endpoint: (device) => ({downlight: 1, ring: 2, default: 1}),
     meta: {multiEndpoint: true},
     extend: [
         // `effect: false` because light() otherwise exposes the standard
