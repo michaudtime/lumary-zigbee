@@ -2,7 +2,8 @@
 
 **Date:** 2026-08-17
 **Status:** items 1, 2, 4 and 5 implemented and **verified on hardware** (bench-tested 2026-08-17
-against the fixture at `0x744dbdfffe6b575f`); item 9 decided; the rest are open
+against the fixture at `0x744dbdfffe6b575f`); item 9 implemented, bench verification outstanding;
+the rest are open
 
 What it takes to make the fixture read as a finished product in Home Assistant rather than a
 working prototype. Written after auditing what HA actually sees today, so each item records the
@@ -161,29 +162,38 @@ and `m.light()` defaults `configureReporting: false`. A `configure()` binding `g
 firmware report into the binding table normally, and would give HA self-healing after a dropped
 report — which it has none of today.
 
-## 9. One light entity or two — DECIDED: two
+## 9. One light entity or two — DONE, two endpoints shipped
 
-`WHITE_SAT_THRESHOLD` in `src/light_state.h` makes colour and white mutually exclusive, so the
+`WHITE_SAT_THRESHOLD` in `src/light_state.h` made colour and white mutually exclusive, so the
 fixture's "gradient auxiliary light" selling point — white downlight plus coloured accent ring at
-the same time — is unreachable.
+the same time — was unreachable from a single light entity.
 
-**Decision (2026-08-17): a second Zigbee endpoint, so HA gets two light entities under one device
-— "Downlight" and "Accent Ring".** This is what a HA user expects from this hardware, and it is the
-only option that actually reaches the capability the fixture was bought for. Cost accepted: it
-ripples through the firmware, the converter and the Inovelli binding story.
+Built as a second Zigbee endpoint, so HA gets two light entities under one device: **Downlight**
+(endpoint 1 — on/off, brightness, colour temperature 2700–6500 K) and **Accent Ring** (endpoint 2 —
+on/off, brightness, xy colour, the six effects). Endpoint 1 stayed the downlight rather than the
+ring, deliberately: existing switch bindings and the OTA/Basic-cluster strings already target it.
 
-What it implies, to be worked out when this is picked up:
+- **Effect-list consequence.** `static_white` and `static_color` are gone — eight effects down to
+  six. White is now the Downlight entity; a solid ring colour is `effect: none` with a colour set.
+  The effect cluster and dropdown live on the ring endpoint only, so this is a breaking change for
+  any automation naming one of the two removed effects. Stored scenes are reseeded automatically —
+  the NVS format version bumped 1 → 2, which discards the old indices rather than misreading them.
+- **Binding decision.** The Inovelli's paddle (its transmitting endpoint 2) now binds to *both*
+  fixture endpoints instead of just the downlight, so a switch tap moves both sources together.
+  This is only safe because **the Inovelli sends discrete `On`/`Off`, not `Toggle`** — confirmed on
+  the hardware. Under `Toggle`, two endpoints that had drifted into different states would diverge
+  further on every tap instead of converging. "Downlight only" becomes a Home Assistant action
+  rather than a switch action.
+- **Re-interview requirement.** Adding the second endpoint changes the device descriptor, and Z2M
+  caches endpoints from the interview — the same mechanism that left `sw_version` reading `null`
+  until re-interview in item 5. A fixture paired before this firmware shows only the downlight until
+  it is **re-interviewed**; newly paired fixtures just work. This is the change most likely to read
+  as "the update broke my light" if missed, so it is called out at the top of the README rather than
+  in a footnote.
 
-- **Firmware.** `LightState` currently models one fixture; it needs to carry downlight and ring
-  independently, and `WHITE_SAT_THRESHOLD` stops being a mode switch. `publishState()` and the
-  endpoint registration in `src/zigbee_light.cpp` both become per-endpoint.
-- **Converter.** Two `m.light()` extends with `endpointNames`, plus an endpoint map. The effect
-  cluster stays on endpoint 1 — effects are a whole-fixture concept, so `effect` should not be
-  duplicated per endpoint, or HA will union two identical lists.
-- **Inovelli binding.** The switch binds to one endpoint. Downlight is the sane default; the ring
-  then only follows via the hub automation, which is a behaviour change worth stating in the README.
-- **Item 7** gains a question: are effect parameters per-endpoint or global? Global, presumably,
-  for the same reason as `effect` itself.
+All of the above is implemented and documented (README: "The two light sources", "Switch Control"
+and "Built-in Effects"); the fixture pass — both entities appearing, both lit at once, the switch
+binding behaving as described — is still outstanding and belongs to the bench verification step.
 
 This unblocks item 10.
 
@@ -191,8 +201,9 @@ This unblocks item 10.
 
 Getting the definition into `zigbee-herdsman-converters` removes the
 `data/external_converters/` install step entirely — pair it and it works. Requires snake_case
-expose names (already the case) and a clean definition. Was blocked on item 9; now blocked only on
-item 9 being *implemented*, since the two-endpoint shape is what would be upstreamed.
+expose names (already the case) and a clean definition. Was blocked on item 9 being decided, then
+on item 9 being implemented — the two-endpoint shape is what would be upstreamed, and now that it
+has shipped this is unblocked.
 
 ## 11. Ship the switch blueprint
 
@@ -204,6 +215,4 @@ contain it. Add an HA blueprint under `ha/` so it is a two-click install. Post-P
 
 ## Suggested order
 
-~~4, 5~~ done. Next, and most of the remaining visible difference: **6** then **3**.
-Then the second half of **2** (`StartUpOnOff` and friends) and **8**.
-Then **9** (decided: two endpoints), which unblocks **10** and shapes **7** and **11**.
+~~4, 5, 9~~ done — item 9 unblocks **10**, which is next. Then **3**, **7** and **11**.

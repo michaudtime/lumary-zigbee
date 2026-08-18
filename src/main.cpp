@@ -4,6 +4,7 @@
 #include "effects.h"
 #include "effect_params.h"
 #include "light_state.h"
+#include "brightness.h"
 #include "scene_store.h"
 #include "zigbee_light.h"
 #include "identify.h"
@@ -75,23 +76,23 @@ void loop() {
     EffectParams p = kDefaultParams[demo_idx];
     const bool on  = true;
 #else
-    const LightState* s = zigbee_light_state();
+    const FixtureState* s = zigbee_light_state();
 
     // Scene params live in NVS; only re-read them when the scene actually
     // changes, and restart the animation clock so effects begin from frame 0.
-    if (s->scene != shown_scene) {
-        shown_scene  = s->scene;
+    if (s->ring.scene != shown_scene) {
+        shown_scene  = s->ring.scene;
         effect_start = now;
         scene_store_load(shown_scene, &scene);
     }
 
-    EffectParams p = light_state_resolve(s, &scene);
-    const bool on  = s->on;
+    EffectParams p = ring_state_resolve(&s->ring, &scene);
+    const bool on  = s->ring.on;
 #endif
 
-    if (p.type >= EFFECT_COUNT) p.type = EFFECT_STATIC_WHITE;   // NVS corruption guard
+    if (p.type >= EFFECT_COUNT) p.type = EFFECT_WARM_GRADIENT;   // NVS corruption guard
 
-    // Identify overrides whatever is running, without disturbing it: LightState
+    // Identify overrides whatever is running, without disturbing it: FixtureState
     // is untouched, so when the deadline passes the next frame resumes normally.
     // Bench demo mode compiles out zigbee_light_* entirely, so the accessor is
     // not available to link against there.
@@ -102,9 +103,24 @@ void loop() {
 #endif
 
     if (identifying) {
+        // Identify is a whole-fixture "which can is this": the ring blinks blue
+        // and the downlight goes dark for the duration, because a lit downlight
+        // washes the blue out. Neither state is touched, so the next frame
+        // after the deadline resumes both by itself.
         fx_identify(now, leds);
+        led_driver_set_cw(0);
+        led_driver_set_ww(0);
     } else {
+#if BENCH_DEMO_MODE
         kEffects[p.type].fn(now - effect_start, p, leds, on);
+#else
+        if (s->ring.mode == MODE_COLOR) fx_ring_solid(p, leds, on);
+        else                            kEffects[p.type].fn(now - effect_start, p, leds, on);
+
+        const WhiteMix w = white_mix_gamma(downlight_level(&s->down), s->down.cct);
+        led_driver_set_ww(w.ww);
+        led_driver_set_cw(w.cw);
+#endif
     }
     led_driver_show(leds, RING_NUM_LEDS);
 }

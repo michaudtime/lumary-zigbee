@@ -4,7 +4,7 @@
 // Timing for the Identify overlay. Deliberately free of ESP-IDF headers so it
 // can be unit-tested on the host, like light_state.h.
 //
-// Identify is an overlay, not a light state: nothing in LightState changes
+// Identify is an overlay, not a light state: nothing in FixtureState changes
 // while it runs, so when the deadline passes the fixture simply resumes.
 
 // Full blink cycle: 250 ms lit, 250 ms dark.

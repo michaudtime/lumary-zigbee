@@ -27,16 +27,18 @@ const EFFECT_NONE = 0xff;
 // Index order must match EffectType in src/effect_params.h. The names are the
 // firmware's kEffects[].name, lowercased. `none` leads because that is the
 // order Home Assistant renders the dropdown in.
+//
+// `static_white` and `static_color` were removed when the fixture split into
+// two entities: white is now the Downlight entity on endpoint 1, and a solid
+// ring colour is `none` with a colour set.
 const EFFECTS = {
     none: EFFECT_NONE,
-    static_white: 0,
-    static_color: 1,
-    warm_gradient: 2,
-    color_gradient: 3,
-    breathing: 4,
-    color_cycle: 5,
-    chase: 6,
-    nightlight: 7,
+    warm_gradient: 0,
+    color_gradient: 1,
+    breathing: 2,
+    color_cycle: 3,
+    chase: 4,
+    nightlight: 5,
 };
 
 const nameFor = (index) => Object.keys(EFFECTS).find((k) => EFFECTS[k] === index);
@@ -52,7 +54,20 @@ const fzEffect = {
     type: ['attributeReport', 'readResponse'],
     convert: (model, msg) => {
         if (msg.data.effect === undefined) return;
-        return {effect: nameFor(msg.data.effect) ?? msg.data.effect};
+        // The key must be `effect_ring`, not `effect`: the expose below is
+        // `.withEndpoint('ring')`, and real zigbee-herdsman-converters
+        // rewrites an endpoint-scoped expose's `property` from `effect` to
+        // `effect_${endpoint}` (the same rewrite postfixWithEndpointName does
+        // at read time). Home Assistant reads value_json.effect_ring, so
+        // returning `effect` here means every device-originated read --
+        // including the rejoin read below -- writes a property nothing
+        // consumes. Hardcoded rather than computed via
+        // postfixWithEndpointName: that helper resolves the endpoint name
+        // from msg.endpoint against the definition's endpoint map, which
+        // would need a much heavier stub to test, and this cluster only ever
+        // exists on the ring endpoint -- there is nothing to actually
+        // compute.
+        return {effect_ring: nameFor(msg.data.effect) ?? msg.data.effect};
     },
 };
 
@@ -83,8 +98,15 @@ const tzEffect = {
 // Definition-level toZigbee converters are matched ahead of extend-provided
 // ones and the first match wins, so this takes precedence over the one light()
 // installs -- which it then delegates to for the actual colour work.
+// Narrowed to `color` only: colour temperature now belongs to the Downlight
+// entity (endpoint 1), which has no effects at all, and the firmware
+// deliberately does not clear the ring's effect attribute on a colour-
+// temperature write (on_downlight_change_temp never calls
+// publish_effect_attr()). Keeping color_temp/color_temp_percent here would
+// make the converter report `effect: none` for the ring while an effect is
+// still running, just because someone changed the downlight's white balance.
 const tzColorClearsEffect = {
-    key: ['color', 'color_temp', 'color_temp_percent'],
+    key: ['color'],
     convertSet: async (entity, key, value, meta) => {
         const result = await tz.light_color_colortemp.convertSet(entity, key, value, meta);
         return {...result, state: {...result?.state, effect: 'none'}};
@@ -101,7 +123,8 @@ const tzColorClearsEffect = {
 // 26.90.0 passes a single {type, data} object.
 const onEvent = async (event) => {
     if (event?.type !== 'deviceAnnounce' && event?.type !== 'start') return;
-    const endpoint = event?.data?.device?.getEndpoint?.(1);
+    // The effect cluster is on endpoint 2 -- the ring owns the effects.
+    const endpoint = event?.data?.device?.getEndpoint?.(2);
     if (!endpoint) return;
     try {
         await endpoint.read('lumary', ['effect']);
@@ -115,15 +138,18 @@ export default {
     model: 'LumaryBrainRevA',
     vendor: 'Lumary',
     description: 'ESP32-H2 Zigbee controller for Lumary 6" RGBAI recessed light',
+    // Two endpoints, two Home Assistant light entities under one device. The
+    // downlight keeps endpoint 1 so existing switch bindings land on the main
+    // light; the ring is the new endpoint 2.
+    endpoint: (device) => ({downlight: 1, ring: 2, default: 1}),
+    meta: {multiEndpoint: true},
     extend: [
-        // Mireds, matching CCT_MIRED_COOL/WARM in src/config.h: 6500 K and 2700 K.
-        //
         // `effect: false` because light() otherwise exposes the standard
         // Identify trigger-effects (blink, breathe, okay, ...) and wires them to
         // genIdentify.triggerEffect, which this firmware has no handler for --
         // the Arduino library surfaces onIdentify() only. Since HA unions every
         // enum expose named `effect` into one list, leaving it on would hand the
-        // light card six dead entries alongside the eight real ones.
+        // light card dead entries alongside the real effects.
         //
         // `powerOnBehavior: false` for the same reason: light() exposes it by
         // default, and the firmware does not implement StartUpOnOff (0x4003)
@@ -133,18 +159,30 @@ export default {
         //     Publish 'set' 'power_on_behavior' to 'Overhead light test'
         //     failed: 'device does not support power on behaviour'
         //
-        // `colorTemp.startup: false` is the same defect one layer down --
-        // asking for colorTemp at all makes light() add a `color_temp_startup`
-        // control backed by StartUpColorTemperature (Colour 0x4010), which the
-        // firmware does not implement either:
+        // For the downlight's colorTemp.startup: asking for colorTemp makes light()
+        // add a `color_temp_startup` control backed by StartUpColorTemperature
+        // (Colour 0x4010), which the firmware does not implement:
         //
         //     lightingColorCtrl.write({"startUpColorTemperature":370})
         //     failed (Status 'UNSUPPORTED_ATTRIBUTE')
         //
         // Turning it off leaves `color_temp` itself untouched. All three come
         // back on together when power-on behaviour is implemented properly.
+        //
+        // Endpoint 1: the inner CW/WW white string. Colour temperature only --
+        // it has no colour dice. Mireds match CCT_MIRED_COOL/WARM in
+        // src/light_state.h: 6500 K and 2700 K.
         m.light({
+            endpointNames: ['downlight'],
             colorTemp: {range: [154, 370], startup: false},
+            color: false,
+            effect: false,
+            powerOnBehavior: false,
+        }),
+        // Endpoint 2: the outer RGB ring. No colour temperature -- it has no
+        // white die, and advertising CCT would expose a control that lies.
+        m.light({
+            endpointNames: ['ring'],
             color: {modes: ['xy']},
             effect: false,
             powerOnBehavior: false,
@@ -174,11 +212,12 @@ export default {
     exposes: [
         e
             .enum('effect', ea.ALL, Object.keys(EFFECTS))
+            .withEndpoint('ring')
             .withDescription(
-                'Which built-in effect the fixture runs. Setting a colour or colour ' +
-                'temperature exits the effect and shows that colour instead, which ' +
-                'reads back as `none`; selecting `none` does the same thing without ' +
-                'changing the colour.',
+                'Which built-in effect the accent ring runs. Setting a colour on the ' +
+                'ring exits the effect and shows that colour instead, which reads back ' +
+                'as `none`; selecting `none` does the same thing without changing the ' +
+                'colour. The downlight is a separate entity and has no effects.',
             ),
     ],
 };
