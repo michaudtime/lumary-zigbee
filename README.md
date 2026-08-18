@@ -232,9 +232,24 @@ ota:
   zigbee_ota_override_index_location: ota/index.json
 ```
 
-Both paths are relative to the Z2M data directory — the index's own location, and the `url` inside
-it naming the image. Verified end to end 2026-08-18 against Z2M 2.13.0: no http(s) URL and no
+Both paths are relative to the **Z2M data directory** — the index's own location, and the `url`
+inside it naming the image. Verified end to end 2026-08-18 against Z2M 2.13.0: no http(s) URL and no
 absolute path is needed for a locally served image.
+
+> **The `url` is relative to the data directory, not to the index that contains it.** With the
+> layout above the index lives at `data/ota/index.json` and the image sits beside it, so the `url`
+> still needs the `ota/` prefix — `ota/foo.zigbee`, not `foo.zigbee`. `gen-ota-index.py` adds it.
+>
+> Getting this wrong is worth recognising, because it does not look like a path problem.
+> `ota_update/check` reads index *metadata* only, so it reports `update_available: true` and Home
+> Assistant offers the update quite happily. Only `ota_update/update` opens the file, and it reports
+> the failure as **`No image currently available`** — the same message you get with no index at all.
+> The real cause appears only in Z2M's debug log:
+>
+> ```
+> zh:controller:ota: Reading firmware image from 'foo.zigbee'
+> ENOENT: no such file or directory, open '/config/zigbee2mqtt/foo.zigbee'
+> ```
 
 Z2M caches the last OTA check, so after installing an index it will keep reporting the device as up
 to date until it re-checks — on the next device announce, hourly, or immediately if you ask:

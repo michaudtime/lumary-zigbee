@@ -8,6 +8,7 @@ The index format is the one used by https://github.com/Koenkk/zigbee-OTA.
 
 Usage:
     python scripts/gen-ota-index.py build/ota/1001-0001-02000000-ota-file.zigbee
+    python scripts/gen-ota-index.py IMAGE --url-prefix ""      # image at the data root
 
 Writes index.json beside the image. See README "OTA Updates".
 """
@@ -49,9 +50,15 @@ def read_header(path):
 
 
 def main():
-    if len(sys.argv) != 2:
+    args = sys.argv[1:]
+    url_prefix = "ota/"
+    if "--url-prefix" in args:
+        i = args.index("--url-prefix")
+        url_prefix = args[i + 1]
+        del args[i:i + 2]
+    if len(args) != 1:
         sys.exit(__doc__)
-    image = sys.argv[1]
+    image = args[0]
 
     manuf, img_type, file_ver, header_string = read_header(image)
     data = open(image, "rb").read()
@@ -61,9 +68,18 @@ def main():
         "fileName": name,
         "fileVersion": file_ver,
         "fileSize": len(data),
-        # Z2M fetches this. A path under the Z2M data directory works for a
-        # locally served image; an http(s) URL works for a hosted one.
-        "url": name,
+        # Resolved relative to the Z2M DATA DIRECTORY -- not to this index's own
+        # location, which is the intuitive reading and is wrong. With the layout
+        # README "OTA Updates" describes, the index sits at data/ota/index.json
+        # and the image beside it, so the url still needs the `ota/` prefix.
+        #
+        # Getting this wrong fails in a way that looks like a missing image
+        # rather than a bad path: `ota_update/check` reads index metadata only,
+        # so it happily reports an update is available, and only `ota_update/update`
+        # tries to open the file. The user-visible error is then
+        # "No image currently available", with the real cause (ENOENT and the
+        # exact path tried) visible only in the Z2M debug log.
+        "url": url_prefix + name,
         "imageType": img_type,
         "manufacturerCode": manuf,
         "sha512": hashlib.sha512(data).hexdigest(),
@@ -81,6 +97,7 @@ def main():
     print(f"  fileVersion      {file_ver:#010x} ({file_ver})")
     print(f"  otaHeaderString  {header_string!r}")
     print(f"  fileSize         {len(data)}")
+    print(f"  url              {entry['url']!r}  (relative to the Z2M data dir)")
 
 
 if __name__ == "__main__":
