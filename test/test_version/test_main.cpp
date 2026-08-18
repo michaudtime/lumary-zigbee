@@ -11,11 +11,11 @@ void tearDown(void) {}
 // above the running one, so a silent change here breaks updates in the field.
 
 void test_zb_fw_version_is_unchanged(void) {
-    TEST_ASSERT_EQUAL_HEX32(0x01000000, ZB_FW_VERSION);
+    TEST_ASSERT_EQUAL_HEX32(0x02000000, ZB_FW_VERSION);
 }
 
 void test_downloaded_version_is_running_plus_one(void) {
-    TEST_ASSERT_EQUAL_HEX32(0x01000001, ZB_FW_VERSION_DL);
+    TEST_ASSERT_EQUAL_HEX32(0x02000001, ZB_FW_VERSION_DL);
     TEST_ASSERT_EQUAL_HEX32(ZB_FW_VERSION + 1, ZB_FW_VERSION_DL);
 }
 
@@ -23,7 +23,7 @@ void test_downloaded_version_is_running_plus_one(void) {
 // three components as the OTA number, or the two drift again.
 
 void test_version_string_matches_the_components(void) {
-    TEST_ASSERT_EQUAL_STRING("1.0.0", FW_VERSION_STRING);
+    TEST_ASSERT_EQUAL_STRING("2.0.0", FW_VERSION_STRING);
 }
 
 void test_date_code_is_eight_digits(void) {

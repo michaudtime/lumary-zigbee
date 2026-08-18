@@ -181,28 +181,32 @@ consequently the gate on signing off the board (plan task 6.4), not a nice-to-ha
 
 The device registers an OTA client at startup and queries for an image once it
 joins, then hourly. The coordinator only offers images numbered **above** the
-running version, so the version block in `src/version.h` must be bumped and
-`ZB_FW_VERSION` passed as `--file-version` below — if they disagree, the update
-silently never appears.
+running version, so the version block in `src/version.h` must be bumped and the
+same `ZB_FW_VERSION` passed as `--file-version` below — if they disagree, the
+update silently never appears.
+
+> **The tool was renamed and its CLI changed.** Espressif's `tools/ota_image_tool.py`
+> is gone; it is now `tools/image_builder_tool/image_builder_tool.py`, it takes short
+> flags rather than the old long ones, and the firmware is supplied as a `--tag`
+> sub-element rather than a positional argument. There is no `create` subcommand, and
+> the output filename is generated for you rather than given. Verified 2026-08-18.
 
 ```bash
 # Get the tool
-curl -L -o ota_image_tool.py \
-  https://raw.githubusercontent.com/espressif/esp-zigbee-sdk/main/tools/ota_image_tool.py
+mkdir -p build/ota && curl -sSL -o build/ota/image_builder_tool.py   https://raw.githubusercontent.com/espressif/esp-zigbee-sdk/main/tools/image_builder_tool/image_builder_tool.py
 
 # Build firmware (bump the version block in src/version.h first)
 pio run -e esp32h2
 
-# Wrap as OTA image -- --file-version must equal ZB_FW_VERSION
-python3 ota_image_tool.py create \
-  --manufacturer-code 0x1001 \
-  --image-type 0x0001 \
-  --file-version 0x01000000 \
-  --stack-version 2 \
-  --header-string "LumaryZigbee" \
-  .pio/build/esp32h2/firmware.bin \
-  lumary.ota
+# Wrap as an OTA image. -m/-i come from src/config.h (ZB_MANUFACTURER_CODE,
+# ZB_IMAGE_TYPE); -v must equal ZB_FW_VERSION. Tag 0x0000 is the upgrade image.
+cd build/ota && python image_builder_tool.py   -m 0x1001   -i 0x0001   -v 0x02000000   -s 2   -g "LumaryZigbee"   --tag 0x0000 ../../.pio/build/esp32h2/firmware.bin
 ```
+
+The output is named from the three identifiers rather than chosen — for the values above,
+`1001-0001-02000000-ota-file.zigbee`. Copy it into Z2M's `data/ota/` folder.
+
+`build/` is git-ignored, so neither the tool nor the image is committed.
 
 ## Build & Flash
 

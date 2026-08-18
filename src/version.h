@@ -8,10 +8,10 @@
 // ota_image_tool.py as --file-version. It is the only number a human types
 // twice, and README.md says so.
 
-#define FW_VERSION_MAJOR  1
+#define FW_VERSION_MAJOR  2
 #define FW_VERSION_MINOR  0
 #define FW_VERSION_PATCH  0
-#define FW_DATE_CODE      "20260817"   // ZCL DateCode, YYYYMMDD
+#define FW_DATE_CODE      "20260818"   // ZCL DateCode, YYYYMMDD
 
 // The coordinator only offers images numbered above the running one.
 #define ZB_FW_VERSION     ((FW_VERSION_MAJOR << 24) | (FW_VERSION_MINOR << 16) | (FW_VERSION_PATCH << 8))
