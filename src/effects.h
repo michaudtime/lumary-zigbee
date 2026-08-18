@@ -19,3 +19,10 @@ extern const Effect kEffects[EFFECT_COUNT];
 // the scene table. It is an overlay the render loop draws instead of the
 // resolved effect, not something a user can select.
 void fx_identify(uint32_t elapsed_ms, CRGB* leds);
+
+// The ring showing a plain colour rather than running an effect -- what
+// MODE_COLOR renders. Deliberately NOT in kEffects, for the same reason
+// fx_identify is not: that table is positionally indexed by both Home
+// Assistant's effect_list and the NVS scene store, and "solid colour" is
+// `effect: none`, not a selectable effect.
+void fx_ring_solid(const EffectParams& p, CRGB* leds, bool light_on);

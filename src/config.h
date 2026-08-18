@@ -57,7 +57,7 @@
 // standard can carry it: the Scenes cluster stores colour/level and knows
 // nothing about EffectParams, and the Identify trigger-effect command (which
 // is what Z2M's built-in "effect" dropdown drives) has no hook in the Arduino
-// library. Writing LUMARY_ATTR_EFFECT selects one of the eight effects.
+// library. Writing LUMARY_ATTR_EFFECT selects one of the six effects.
 // See docs/superpowers/specs/2026-08-15-effect-selection-design.md.
 // Selection arrives as a COMMAND rather than an attribute write: ZigbeeColor
 // DimmableLight declares zbAttributeSet private, so a subclass can override it
@@ -73,7 +73,11 @@
 // command has taken the fixture out of effect mode, so Home Assistant's effect
 // dropdown -- which has no null member -- always has something true to show.
 
-#define LIGHT_ENDPOINT        1
+// Two endpoints, two Home Assistant light entities. The downlight keeps
+// endpoint 1: existing switch bindings target it and should land on the main
+// light, and the OTA client and Basic strings already live there.
+#define DOWNLIGHT_ENDPOINT    1
+#define RING_ENDPOINT         2
 #define ZB_MANUFACTURER_CODE  0x1001
 #define ZB_IMAGE_TYPE         0x0001
 
@@ -85,7 +89,7 @@
 #define NVS_NAMESPACE         "lm_light"
 #define NVS_KEY_FMT_VER       "fmt_ver"
 #define NVS_KEY_ACTIVE_SCENE  "active_scene"
-#define NVS_FMT_VER_CURRENT   1
+#define NVS_FMT_VER_CURRENT   2   // 1 -> 2: effect indices renumbered, 8 -> 6
 #define NVS_MAX_SCENES        16
 
 // ── Watchdog ──────────────────────────────────────────

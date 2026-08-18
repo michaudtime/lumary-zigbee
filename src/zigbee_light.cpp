@@ -7,7 +7,7 @@
 #include <string.h>
 #include "Zigbee.h"
 
-static LightState s_state;
+static FixtureState s_state;
 
 // Written on the Zigbee task, read on the Arduino render task. A single
 // aligned 32-bit word needs no mutex, but the volatile is load-bearing.
@@ -16,64 +16,34 @@ static volatile uint32_t s_identify_until = 0;
 static void apply_effect(uint8_t index);
 static void publish_effect_attr();
 
-// ZigbeeColorDimmableLight plus one manufacturer-specific cluster carrying the
-// effect index. The Arduino wrapper has no cluster-building API, so the
-// constructor reaches _cluster_list (protected on ZigbeeEP) and uses the raw
-// esp_zb calls -- the same pattern the base class itself uses to bolt extra
-// attributes onto Colour Control.
-//
-// The attribute is READ-ONLY on purpose. Selection comes in as a command
-// instead, because zbAttributeSet is private in the base class: a subclass may
-// override it but cannot call it, so intercepting attribute writes would strand
-// on/off, level and colour with no handler at all.
-class LumaryLight : public ZigbeeColorDimmableLight {
+// Shared plumbing for both light endpoints. The Arduino wrapper has no
+// cluster-building API, so this reaches _cluster_list (protected on ZigbeeEP)
+// and uses the raw esp_zb calls -- the same pattern the base class itself uses.
+class LumaryEndpoint : public ZigbeeColorDimmableLight {
 public:
-    explicit LumaryLight(uint8_t endpoint) : ZigbeeColorDimmableLight(endpoint) {
-        uint8_t effect = 0;
-        esp_zb_attribute_list_t* custom = esp_zb_zcl_attr_list_create(LUMARY_CLUSTER_ID);
-        esp_zb_custom_cluster_add_custom_attr(custom, LUMARY_ATTR_EFFECT,
-                                              ESP_ZB_ZCL_ATTR_TYPE_U8,
-                                              ESP_ZB_ZCL_ATTR_ACCESS_READ_ONLY,
-                                              &effect);
-        esp_zb_cluster_list_add_custom_cluster(_cluster_list, custom,
-                                               ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);
+    explicit LumaryEndpoint(uint8_t endpoint) : ZigbeeColorDimmableLight(endpoint) {}
 
-        addBasicStringAttr(ESP_ZB_ZCL_ATTR_BASIC_SW_BUILD_ID, FW_VERSION_STRING);
-        addBasicStringAttr(ESP_ZB_ZCL_ATTR_BASIC_DATE_CODE_ID, FW_DATE_CODE);
-    }
-
-    // Push the fixture's true state to the coordinator. Nothing else does this
-    // after a reboot, so Z2M keeps showing whatever it last saw -- typically
-    // "on" for a light that came back off, which it then reports to HA.
+    // Push this endpoint's true state to the coordinator. Nothing else does
+    // this after a reboot, so Z2M keeps showing whatever it last saw --
+    // typically "on" for a light that came back off.
     //
     // Deliberately not built on setLightState()/setLightLevel(): those no-op
     // when the value is unchanged (so at boot, where off == off, they would
     // push nothing at all), and when the value HAS changed they re-enter our
     // own light-changed callback, which would drag the light into MODE_COLOR.
-    // Writing the attributes and reporting them directly avoids both.
-    void publishState(bool on, uint8_t level, uint8_t effect) {
+    void publishState(bool on, uint8_t level) {
         uint8_t on_val = on ? 1 : 0;
         setAttr(ESP_ZB_ZCL_CLUSTER_ID_ON_OFF,
                 ESP_ZB_ZCL_ATTR_ON_OFF_ON_OFF_ID, &on_val);
         setAttr(ESP_ZB_ZCL_CLUSTER_ID_LEVEL_CONTROL,
                 ESP_ZB_ZCL_ATTR_LEVEL_CONTROL_CURRENT_LEVEL_ID, &level);
-        setAttr(LUMARY_CLUSTER_ID, LUMARY_ATTR_EFFECT, &effect);
-
         reportAttr(ESP_ZB_ZCL_CLUSTER_ID_ON_OFF,
                    ESP_ZB_ZCL_ATTR_ON_OFF_ON_OFF_ID);
         reportAttr(ESP_ZB_ZCL_CLUSTER_ID_LEVEL_CONTROL,
                    ESP_ZB_ZCL_ATTR_LEVEL_CONTROL_CURRENT_LEVEL_ID);
-        // The effect attribute is deliberately NOT reported. esp_zb rejects it
-        // with ESP_ERR_NOT_SUPPORTED unless the attribute carries
-        // ESP_ZB_ZCL_ATTR_ACCESS_REPORTING -- and adding that flag to a custom
-        // cluster attribute makes Zigbee.begin() hang before it ever starts the
-        // stack (bisected on hardware 2026-08-15: with the flag, setup() reached
-        // "LED driver init ok" and never logged "Zigbee started"; without it,
-        // joined at 134 ms). The value is still written above, so a READ returns
-        // the truth, which is what the Z2M converter's convertGet uses.
     }
 
-private:
+protected:
     // ZCL character strings are length-prefixed, not null-terminated: byte 0 is
     // the length. Same encoding the base class does by hand for manufacturer
     // and model. Without these two attributes HA's device page reads
@@ -130,42 +100,83 @@ private:
     }
 };
 
-static LumaryLight s_ep(LIGHT_ENDPOINT);
+// Endpoint 1: the inner CW/WW white string. Carries the device-level furniture
+// -- Basic strings and the OTA client -- because it is endpoint 1.
+class LumaryDownlight : public LumaryEndpoint {
+public:
+    explicit LumaryDownlight(uint8_t endpoint) : LumaryEndpoint(endpoint) {
+        addBasicStringAttr(ESP_ZB_ZCL_ATTR_BASIC_SW_BUILD_ID, FW_VERSION_STRING);
+        addBasicStringAttr(ESP_ZB_ZCL_ATTR_BASIC_DATE_CODE_ID, FW_DATE_CODE);
+    }
+};
 
-// The endpoint reports state, level and colour together on every change, so the
-// only way to tell a colour command from a plain dim is to compare against the
-// last colour we saw. Without this, nudging the brightness would kick the light
-// out of whatever scene it was running.
-static uint8_t s_last_r = 255, s_last_g = 255, s_last_b = 255;
+// Endpoint 2: the outer RGB ring, plus the manufacturer-specific cluster
+// carrying the effect index.
+//
+// The attribute is READ-ONLY on purpose. Selection comes in as a command
+// instead, because zbAttributeSet is private in the base class: a subclass may
+// override it but cannot call it, so intercepting attribute writes would strand
+// on/off, level and colour with no handler at all.
+class LumaryRing : public LumaryEndpoint {
+public:
+    explicit LumaryRing(uint8_t endpoint) : LumaryEndpoint(endpoint) {
+        uint8_t effect = 0;
+        esp_zb_attribute_list_t* custom = esp_zb_zcl_attr_list_create(LUMARY_CLUSTER_ID);
+        esp_zb_custom_cluster_add_custom_attr(custom, LUMARY_ATTR_EFFECT,
+                                              ESP_ZB_ZCL_ATTR_TYPE_U8,
+                                              ESP_ZB_ZCL_ATTR_ACCESS_READ_ONLY,
+                                              &effect);
+        esp_zb_cluster_list_add_custom_cluster(_cluster_list, custom,
+                                               ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);
+    }
 
-// Runs on the Zigbee task, not in loop(). Every field it touches is byte-sized
-// and the reader only renders frames from them, so the worst a race can do is
-// show one frame of mixed state -- not worth a mutex on the render path.
-static void on_light_change_rgb(bool state, uint8_t r, uint8_t g, uint8_t b, uint8_t level) {
-    s_state.on    = state;
-    s_state.level = level;
-    if (r != s_last_r || g != s_last_g || b != s_last_b) {
-        s_last_r = r;
-        s_last_g = g;
-        s_last_b = b;
-        const LightMode was = s_state.mode;
-        light_state_set_color(&s_state, CRGB{r, g, b});   // moves out of scene mode
-        if (was == MODE_SCENE) publish_effect_attr();     // ...so stop naming one
+    void publishState(bool on, uint8_t level, uint8_t effect) {
+        LumaryEndpoint::publishState(on, level);
+        setAttr(LUMARY_CLUSTER_ID, LUMARY_ATTR_EFFECT, &effect);
+        // The effect attribute is deliberately NOT reported. esp_zb rejects it
+        // with ESP_ERR_NOT_SUPPORTED unless the attribute carries
+        // ESP_ZB_ZCL_ATTR_ACCESS_REPORTING -- and adding that flag to a custom
+        // cluster attribute makes Zigbee.begin() hang before it ever starts the
+        // stack (bisected on hardware 2026-08-15). The value is still written
+        // above, so a READ returns the truth, which is what the Z2M converter's
+        // convertGet uses.
+    }
+};
+
+static LumaryDownlight s_down(DOWNLIGHT_ENDPOINT);
+static LumaryRing      s_ring(RING_ENDPOINT);
+
+// The ring endpoint reports state, level and colour together on every change,
+// so the only way to tell a colour command from a plain dim is to compare
+// against the last colour we saw. Without this, nudging the brightness would
+// kick the ring out of whatever scene it was running.
+static uint8_t s_ring_last_r = 255, s_ring_last_g = 255, s_ring_last_b = 255;
+
+// ── endpoint 1: the downlight ─────────────────────────────────────────────
+// Colour-temperature capability only, so this is the only light-change
+// callback it needs. No RGB callback, and no rgb_to_cct fallback: the
+// coordinator can only express this endpoint's colour as mireds.
+static void on_downlight_change_temp(bool state, uint8_t level, uint16_t mireds) {
+    s_state.down.on    = state;
+    s_state.down.level = level;
+    downlight_set_cct(&s_state.down, mireds);
+}
+
+// ── endpoint 2: the ring ──────────────────────────────────────────────────
+static void on_ring_change_rgb(bool state, uint8_t r, uint8_t g, uint8_t b, uint8_t level) {
+    s_state.ring.on    = state;
+    s_state.ring.level = level;
+    if (r != s_ring_last_r || g != s_ring_last_g || b != s_ring_last_b) {
+        s_ring_last_r = r;
+        s_ring_last_g = g;
+        s_ring_last_b = b;
+        const LightMode was = s_state.ring.mode;
+        ring_set_color(&s_state.ring, CRGB{r, g, b});   // moves out of scene mode
+        if (was == MODE_SCENE) publish_effect_attr();   // ...so stop naming one
     }
 }
 
-// Fires when the coordinator drives the Colour Control cluster in colour
-// temperature mode -- i.e. the white slider in Home Assistant. Routed straight
-// to the CW/WW string, which is what actually makes white in this fixture.
-static void on_light_change_temp(bool state, uint8_t level, uint16_t mireds) {
-    s_state.on    = state;
-    s_state.level = level;
-    const LightMode was = s_state.mode;
-    light_state_set_cct(&s_state, mireds);
-    if (was == MODE_SCENE) publish_effect_attr();
-}
-
-// Identify is an overlay: it does not touch LightState, so when the deadline
+// Identify is an overlay: it does not touch FixtureState, so when the deadline
 // passes the fixture resumes whatever it was doing with no restore step.
 //
 // ZCL treats IdentifyTime = 0 as "stop identifying", which is how a
@@ -194,33 +205,37 @@ static void on_custom_command(const esp_zb_zcl_custom_cluster_command_message_t*
 }
 
 void zigbee_light_init() {
-    light_state_init(&s_state);
-    s_state.scene = scene_store_get_active();
+    fixture_state_init(&s_state);
+    s_state.ring.scene = scene_store_get_active();
 
-    s_ep.onLightChangeRgb(on_light_change_rgb);
-    s_ep.onLightChangeTemp(on_light_change_temp);
-    s_ep.onIdentify(on_identify);
-    s_ep.onCustomClusterCommand(on_custom_command);
-    s_ep.setManufacturerAndModel("Lumary", "LumaryBrainRevA");
-
-    // Advertise colour temperature alongside colour, then publish the range the
-    // fixture can actually reach. Both must happen before the stack starts, and
-    // the range setter refuses to run unless the capability bit is already set.
-    s_ep.setLightColorCapabilities(ZIGBEE_COLOR_CAPABILITY_HUE_SATURATION
-                                 | ZIGBEE_COLOR_CAPABILITY_X_Y
-                                 | ZIGBEE_COLOR_CAPABILITY_COLOR_TEMP);
-    if (!s_ep.setLightColorTemperatureRange(CCT_MIRED_COOL, CCT_MIRED_WARM)) {
+    // ── endpoint 1: downlight ──
+    s_down.onLightChangeTemp(on_downlight_change_temp);
+    s_down.onIdentify(on_identify);
+    s_down.setManufacturerAndModel("Lumary", "LumaryBrainRevA");
+    s_down.setLightColorCapabilities(ZIGBEE_COLOR_CAPABILITY_COLOR_TEMP);
+    if (!s_down.setLightColorTemperatureRange(CCT_MIRED_COOL, CCT_MIRED_WARM)) {
         log_e("Failed to publish colour temperature range");
     }
 
-    // Zigbee OTA. The coordinator only offers images numbered above the running
-    // version, so ZB_FW_VERSION must match the .ota image's --file-version.
-    if (!s_ep.addOTAClient(ZB_FW_VERSION, ZB_FW_VERSION_DL, ZB_HW_VERSION,
-                           ZB_MANUFACTURER_CODE, ZB_IMAGE_TYPE)) {
+    // Zigbee OTA, on endpoint 1 only -- one client per device. The coordinator
+    // only offers images numbered above the running version, so ZB_FW_VERSION
+    // must match the .ota image's --file-version.
+    if (!s_down.addOTAClient(ZB_FW_VERSION, ZB_FW_VERSION_DL, ZB_HW_VERSION,
+                             ZB_MANUFACTURER_CODE, ZB_IMAGE_TYPE)) {
         log_e("Failed to add OTA client");
     }
 
-    Zigbee.addEndpoint(&s_ep);
+    // ── endpoint 2: accent ring ──
+    // No colour temperature: the ring has no white die, and advertising CCT
+    // would put a control in Home Assistant that lies.
+    s_ring.onLightChangeRgb(on_ring_change_rgb);
+    s_ring.onCustomClusterCommand(on_custom_command);
+    s_ring.setManufacturerAndModel("Lumary", "LumaryBrainRevA");
+    s_ring.setLightColorCapabilities(ZIGBEE_COLOR_CAPABILITY_HUE_SATURATION
+                                   | ZIGBEE_COLOR_CAPABILITY_X_Y);
+
+    Zigbee.addEndpoint(&s_down);
+    Zigbee.addEndpoint(&s_ring);
 
     // Router, not end device: these are mains-powered ceiling fixtures, so each
     // one should extend the mesh for the others.
@@ -243,7 +258,7 @@ void zigbee_light_loop() {
     static bool s_joined_once = false;
     if (!s_joined_once && Zigbee.connected()) {
         s_joined_once = true;
-        s_ep.requestOTAUpdate();
+        s_down.requestOTAUpdate();
         log_i("Zigbee joined; OTA update requested");
 
         // Tell the coordinator what we actually are, before anything asks. The
@@ -251,14 +266,16 @@ void zigbee_light_loop() {
         // built during static init -- before setup() opens NVS -- so without
         // this both are wrong: HA shows the pre-reboot on/off state, and a read
         // reports effect 0 whatever is really running.
-        const uint8_t effect = light_state_effect_value(&s_state);
-        s_ep.publishState(s_state.on, s_state.level, effect);
-        log_i("Published state: on=%d level=%u effect=%u",
-              s_state.on, s_state.level, effect);
+        const uint8_t effect = ring_effect_value(&s_state.ring);
+        s_down.publishState(s_state.down.on, s_state.down.level);
+        s_ring.publishState(s_state.ring.on, s_state.ring.level, effect);
+        log_i("Published state: downlight on=%d level=%u / ring on=%d level=%u effect=%u",
+              s_state.down.on, s_state.down.level,
+              s_state.ring.on, s_state.ring.level, effect);
     }
 }
 
-const LightState* zigbee_light_state() {
+const FixtureState* zigbee_light_state() {
     return &s_state;
 }
 
@@ -268,37 +285,35 @@ const LightState* zigbee_light_state() {
 // half the attribute goes on naming the last effect while the ring holds a
 // static colour, and Home Assistant's dropdown shows an effect that stopped.
 static void publish_effect_attr() {
-    uint8_t value = light_state_effect_value(&s_state);
-    esp_zb_zcl_set_attribute_val(LIGHT_ENDPOINT, LUMARY_CLUSTER_ID,
+    uint8_t value = ring_effect_value(&s_state.ring);
+    esp_zb_zcl_set_attribute_val(RING_ENDPOINT, LUMARY_CLUSTER_ID,
                                  ESP_ZB_ZCL_CLUSTER_SERVER_ROLE,
                                  LUMARY_ATTR_EFFECT, &value, false);
 }
 
-// Runs on the Zigbee task. light_state_set_scene rejects an out-of-range index
+// Runs on the Zigbee task. ring_set_scene rejects an out-of-range index
 // outright, so re-read the state rather than trusting what was asked for --
 // otherwise a bad write would persist a scene the effect engine can't render.
 static void apply_effect(uint8_t index) {
     if (index == LIGHT_EFFECT_NONE) {
         // "None" in the Home Assistant dropdown: stop the effect and hold the
         // colour already on show. Deliberately NOT persisted -- the stored
-        // active scene is what a power cycle should come back to, and
-        // light_state_init() boots in MODE_SCENE regardless, so persisting
-        // "none" would only make the two disagree.
-        light_state_clear_scene(&s_state);
+        // active scene is what a power cycle should come back to.
+        ring_clear_scene(&s_state.ring);
         publish_effect_attr();
         log_i("Effect cleared; holding the current colour");
         return;
     }
 
-    light_state_set_scene(&s_state, index, EFFECT_COUNT);
-    if (s_state.scene != index) {
+    ring_set_scene(&s_state.ring, index, EFFECT_COUNT);
+    if (s_state.ring.scene != index) {
         log_w("Ignored out-of-range effect %u", index);
         return;
     }
-    scene_store_set_active(s_state.scene);
+    scene_store_set_active(s_state.ring.scene);
     publish_effect_attr();
     zigbee_light_report();
-    log_i("Effect %u selected", s_state.scene);
+    log_i("Effect %u selected", s_state.ring.scene);
 }
 
 void zigbee_light_set_effect(uint8_t index) {
@@ -306,8 +321,8 @@ void zigbee_light_set_effect(uint8_t index) {
 }
 
 void zigbee_light_report() {
-    s_ep.setLightState(s_state.on);
-    s_ep.setLightLevel(s_state.level);
+    s_ring.setLightState(s_state.ring.on);
+    s_ring.setLightLevel(s_state.ring.level);
 }
 
 uint32_t zigbee_light_identify_until() {

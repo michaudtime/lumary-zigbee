@@ -16,12 +16,13 @@ bool zigbee_light_connected();
 // the first OTA query.
 void zigbee_light_loop();
 
-// Live state, updated from Zigbee callbacks.
-const LightState* zigbee_light_state();
+// Live state, updated from Zigbee callbacks. One object, two independent
+// halves -- see FixtureState in light_state.h.
+const FixtureState* zigbee_light_state();
 
-// Selects one of the eight effects and persists it to NVS. Normally driven from
-// the coordinator sending LUMARY_CMD_SET_EFFECT; exposed for a future local
-// button. Out-of-range indices are ignored, not clamped.
+// Selects one of the six ring effects and persists it to NVS. Normally driven
+// from the coordinator sending LUMARY_CMD_SET_EFFECT on RING_ENDPOINT; exposed
+// for a future local button. Out-of-range indices are ignored, not clamped.
 //
 // LIGHT_EFFECT_NONE stops the effect and holds the colour already on show,
 // which is what "none" in Home Assistant's effect dropdown sends. It is not
