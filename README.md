@@ -162,14 +162,24 @@ permanently is a future change.
 > above — after this update it needs a Z2M **re-interview** before the ring entity works, or the
 > upgrade will look broken even though it succeeded.
 
-**Primary:** Zigbee OTA via Zigbee2MQTT — drop the `.ota` image in Z2M's `data/ota/` folder and
-the update appears in the HA dashboard.
+**Primary:** Zigbee OTA via Zigbee2MQTT.
 
-> **Both halves have to be present.** The firmware registers an OTA client and asks for an image on
-> every join; the converter's `m.ota()` is what lets Z2M answer. With the client but no `m.ota()` the
-> device queries into silence — no `update` entity, no image offered — and the firmware side looks
-> perfectly healthy the whole time. This repo was in exactly that state until 2026-08-18, so make
-> sure the converter in `data/external_converters/` is current before concluding OTA is broken.
+Three things must all be true, and each one fails differently:
+
+| Requirement | Symptom when missing |
+|---|---|
+| Firmware registers an OTA client | Device never asks; nothing in the Z2M log |
+| Converter declares `ota: true` | **No `update` entity at all** in Home Assistant |
+| Z2M can find the image via an index | Update entity exists; update fails `No image currently available` |
+
+> **Z2M does not discover firmware by scanning a folder.** Copying a `.zigbee` file into `data/ota/`
+> accomplishes nothing on its own — Z2M reads an *index* that describes the image, pointed at by
+> `ota.zigbee_ota_override_index_location` in `configuration.yaml`. `scripts/gen-ota-index.py`
+> generates one; see "Building an OTA image" below.
+
+> **`ota` is a definition property, not a modern extend.** There is no `m.ota()` in
+> zigbee-herdsman-converters, and using one makes Z2M reject the entire converter as invalid at load
+> time. It goes on the definition object alongside `onEvent`.
 
 **There is no fallback.** A BLE OTA path was planned — `PIN_BLE_OTA_BUTTON` is still defined in
 `src/config.h` — but it was never implemented, and nothing references that pin. Do not count on it
@@ -204,9 +214,33 @@ cd build/ota && python image_builder_tool.py   -m 0x1001   -i 0x0001   -v 0x0200
 ```
 
 The output is named from the three identifiers rather than chosen — for the values above,
-`1001-0001-02000000-ota-file.zigbee`. Copy it into Z2M's `data/ota/` folder.
+`1001-0001-02000000-ota-file.zigbee`.
 
-`build/` is git-ignored, so neither the tool nor the image is committed.
+Then generate the index Z2M actually reads. It takes the manufacturer code, image type, file version
+and header string out of the image itself rather than from arguments, so the index cannot disagree
+with the file it describes:
+
+```bash
+python scripts/gen-ota-index.py build/ota/1001-0001-02000000-ota-file.zigbee
+```
+
+Copy **both** the `.zigbee` image and the generated `index.json` into Z2M's `data/ota/` folder, then
+point `configuration.yaml` at the index and restart Z2M:
+
+```yaml
+ota:
+  zigbee_ota_override_index_location: ota/index.json
+```
+
+For a one-off test you can skip the index entirely and name the file in the update request, which is
+useful for confirming the image itself is good before troubleshooting configuration:
+
+```
+topic:   zigbee2mqtt/bridge/request/device/ota_update/update
+payload: {"id": "Overhead light test", "url": "ota/1001-0001-02000000-ota-file.zigbee"}
+```
+
+`build/` is git-ignored, so neither the tool, the image, nor the index is committed.
 
 ## Build & Flash
 
