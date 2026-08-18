@@ -1,7 +1,7 @@
 # Bench verification — everything outstanding
 
 **Date:** 2026-08-18
-**Status:** in progress — §§1-7 done 2026-08-18
+**Status:** in progress — §§1-8 done 2026-08-18
 
 Three separate bodies of work are merged to `main` and unverified on hardware. This consolidates
 their outstanding checks into one session, in an order chosen so that each check does not mask the
@@ -320,21 +320,48 @@ only reachable by testing the real power-up path rather than a tethered one.
 Lesson worth carrying: a bench rig that differs from the deployed configuration in *any* powered
 respect will hide exactly the faults that matter. Sections 1-7 all passed while this was live.
 
-### The section proper
+### The section proper — PASS
 
+- [x] Select an effect, power cycle, and watch what HA shows
 
+Tested with `chase` (index 4) rather than `warm_gradient` (index 0), deliberately: index 0 is both
+the reseed default and the effect attribute's static-init value, so it cannot distinguish a restore
+from a reset. Cold boot performed with USB fully unplugged, so this also exercised the deployed
+power-up path.
 
-- [ ] Select an effect, power cycle, and watch what HA shows
+Result, all three in agreement:
 
-Expected: the ring returns to its stored effect, and **HA displays it** rather than sticking at
-whatever it last showed. That read-back path was broken and fixed on the last branch — this is its
-regression test.
+- the ring physically renders `chase` once turned on
+- a **forced** read of the attribute -- the refresh control on the Effect expose, which calls
+  `convertGet` -> `entity.read('lumary', ['effect'])` on endpoint 2, bypassing Z2M's cache --
+  returns `chase`
+- HA reports `effect: chase`, `color_mode: xy`, `brightness: 255`
 
-- [ ] Confirm the stored scenes reseeded rather than misread: the NVS schema went 1 → 2, so the old
-      eight-effect indices should have been discarded
+The forced read matters: Z2M persists its own state store across restarts, so the Exposes tab
+showing the right value proves nothing on its own. Only the explicit read confirms the device itself
+holds it.
 
-> **NVS scene storage has never been exercised on hardware at all** — the earlier bench run used
-> `BENCH_DEMO_MODE`, which bypasses `scene_store` entirely. This is its first real test.
+**How the attribute gets synced**, since it is not obvious and is easy to mis-read: the ZCL attribute
+is built during static init, before `setup()` ever opens NVS, so at boot it does not reflect the
+restored scene. `zigbee_light_init()` does not fix that, and neither does `zigbee_light_report()`.
+The correction is a one-shot in `zigbee_light_loop()`, fired the first time `Zigbee.connected()`
+goes true, which publishes both endpoints' real state including the effect. The comment there names
+the exact failure it prevents. Anything that reorders or removes that one-shot silently reintroduces
+"a read reports effect 0 whatever is really running".
+
+Also worth noting for future readers: **Home Assistant nulls every light attribute while the light
+is off** -- `effect`, `brightness` and `color_mode` all go null together. An off light showing no
+effect is not evidence of anything. The ring must be on for this check to mean anything.
+
+- [x] Confirm the stored scenes reseeded rather than misread
+
+Passed behaviourally in section 7: all six effects rendered correctly with sensible parameters, which
+they would not have if version 1's eight-effect records had survived and been reinterpreted under the
+new six-effect numbering. `scene_store_init()` reseeds all `EFFECT_COUNT` slots from `kDefaultParams`
+whenever the stored `fmt_ver` does not match `NVS_FMT_VER_CURRENT`.
+
+NVS scene storage had never run on hardware before today -- the earlier bench session used
+`BENCH_DEMO_MODE`, which bypasses `scene_store` entirely. It works.
 
 ---
 
