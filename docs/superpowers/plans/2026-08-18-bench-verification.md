@@ -1,7 +1,7 @@
 # Bench verification — everything outstanding
 
 **Date:** 2026-08-18
-**Status:** in progress — §1 and §2 done 2026-08-18
+**Status:** in progress — §§1-3 done 2026-08-18
 
 Three separate bodies of work are merged to `main` and unverified on hardware. This consolidates
 their outstanding checks into one session, in an order chosen so that each check does not mask the
@@ -103,19 +103,26 @@ for this fixture — but the other Lumary fixtures will when they are flashed.
 
 ---
 
-## 3. The low end, on the white string
+## 3. The low end, on the white string — PASS
 
-This is the 0.24 µs question.
+This is the 0.24 uS question, and it is the one every other result rested on.
 
-- [ ] Set the downlight to brightness **1**, then 2, 3, 4, 5
+- [x] Set the downlight to brightness **1**, then 2, 3, 4, 5
 
-Expected: brightness 1 produces **visible dim light**, and each step is brighter than the last.
+Brightness 1 produces visible dim light, and each step is brighter than the last.
 
-If brightness 1–N produce nothing, **record N precisely.** That is the measured minimum duty, and it
-replaces the provisional `max(1, …)` floor in `white_mix_gamma()`. A real threshold here is a
-legitimate outcome, not a failure — the design says so explicitly.
+**Measured N: none — there is no dead zone.** The L-SD8E1's constant-current loop does respond to a
+single-count duty at 12-bit resolution (1/4095 at 1 kHz, a 0.24 uS pulse). The 8-bit to 12-bit move
+is therefore sound at the bottom of its range, not merely at the top.
 
-Measured N: ______
+Consequences:
+
+- No code change. The provisional `max(1, ...)` floor in `white_mix_gamma()`
+  (`src/brightness.h`) stands as written, and no measured-minimum lift is needed.
+- The CIE L* curve's linear segment below L* = 8 is doing exactly what it was chosen for: it is
+  what lets brightness 1 resolve to a non-zero duty at all, and the driver honours it.
+- The `+127` rounding added to `white_mix_gamma()` is exercised in this range, so a clean sweep here
+  is also evidence against the truncation bug it was added to fix. Section 5 confirms it directly.
 
 ---
 
