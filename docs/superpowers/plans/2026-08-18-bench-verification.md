@@ -199,18 +199,60 @@ and the exclusion is gone.
 
 ---
 
-## 7. The effects
+## 7. The effects — mostly PASS, one real finding
 
-- [ ] All six run and dim smoothly: `warm_gradient`, `color_gradient`, `breathing`, `color_cycle`,
+- [x] All six run and dim: `warm_gradient`, `color_gradient`, `breathing`, `color_cycle`,
       `chase`, `nightlight`
-- [ ] The effect dropdown is on the **ring** entity and lists six plus `none`
+- [x] The effect dropdown is on the **ring** entity and lists six plus `none`
+
+### FINDING: effects collapse to black below roughly brightness 20
+
+Reported at the bench: `warm_gradient` "looks like it turns off" at brightness 16. Reproduced in
+arithmetic -- this is a **resolution limit, not a logic bug**, and it is confined to the ring.
+
+At brightness 16 the CIE curve asks for 0.7% output. That is 28 counts of 4095 on the downlight,
+which is comfortable, and under 2 counts of 255 on the ring, which is not. The effect then scales
+each pixel *again* before the brightness multiplier lands:
+
+```
+warm_gradient at brightness 16 (gamma8(16) = 2):
+  peak  {255,169, 87} -> {2,1,0}
+  3/4   {191,126, 65} -> {1,0,0}
+  mid   {127, 84, 43} -> {0,0,0}
+  1/4   { 63, 42, 21} -> {0,0,0}
+```
+
+Most of the ring is driven to true black and the peak is a single dim red count. Available ring
+output levels by slider position: 10 -> 1, 16 -> 2, 24 -> 3, 32 -> 4, 48 -> 7, 64 -> 11.
+
+This is a real change from pre-gamma behaviour, where linear scaling gave the peak pixel 15 counts
+at slider 16 rather than 2. The curve is correct; the ring's 8-bit output cannot express it. Section
+4 passed because a *solid* colour still resolves to a non-zero count -- it is specifically effects,
+which pre-scale their pixels, that fall off the bottom.
+
+Two candidate responses, deliberately not actioned mid-bench:
+
+- **Cheap partial:** `scale_by_255()` in `src/brightness.h` truncates. Adding `+127` rounding --
+  the same fix `white_mix_gamma()` already carries for the white split, for the same reason --
+  recovers one output step, taking the mid pixel from 0 to 1 and moving the collapse threshold down
+  a couple of slider positions. Does not solve it.
+- **Real fix:** temporal dithering, alternating adjacent output values across frames so the
+  time-average falls between them. This is how 8-bit pixel libraries reach effective 12-bit
+  behaviour. Needs a stable frame rate and its own design cycle.
+
+### Still outstanding in this section
+
 - [ ] Setting a ring colour drops `effect` to `none`
-- [ ] **Change the downlight's colour temperature while a ring effect runs** — the ring's effect must
-      **stay** what it was. If HA flips it to `none`, the converter is still clearing on the wrong
-      entity.
-- [ ] `warm_gradient` **at full brightness** — its rendering changed, not just its dimming. Compare
-      against memory; it should look the same or better.
-- [ ] `fx_breathing`'s trough: watch that it fades to very dim rather than snapping to black
+- [ ] **Change the downlight's colour temperature while a ring effect runs** -- the ring's effect
+      must **stay** what it was. If HA flips it to `none`, `tzColorClearsEffect` is still clearing on
+      the wrong entity. This is the last-branch regression check.
+- [ ] `warm_gradient` **at full brightness** -- its rendering changed, not just its dimming.
+      Compare against memory; it should look the same or better.
+- [ ] `fx_breathing`'s trough: watch that it fades to very dim rather than snapping to black.
+      Note this interacts directly with the finding above.
+- [ ] Select an effect from the **downlight** card (the §2 union finding). Endpoint 1 has no
+      `0xFC00` cluster, so a Z2M error and no visible change is expected. This decides whether the
+      dropdown needs suppressing there.
 
 ---
 
