@@ -1,8 +1,9 @@
 # Custom effects — brainstorm
 
 **Date:** 2026-08-18
-**Status:** brainstorm. Nothing here is decided; §8 is the list of questions that have to be
-answered before any of it becomes a plan.
+**Status:** brainstorm, second pass. The shape is now decided (§3.1) — an offline HTML designer
+that pushes named effects into ten device slots, ring only. §8 records what is settled and what is
+still open.
 
 ## 1. What we have, and what "custom effects" would have to touch
 
@@ -126,7 +127,7 @@ surface.
 ## 3. What the authoring program looks like
 
 This is the actual question — "a program that allows for the setup of custom effects". Four
-shapes, and they are not mutually exclusive.
+shapes were considered; **C is chosen**, and §3.1 records the shape in the owner's words.
 
 ### A. Z2M exposes only — no new program
 
@@ -179,6 +180,65 @@ nothing but `effect` selection (which already works).** C and B share the recipe
 publish path; the page is a front-end over the same YAML the CLI eats. D stays open as a follow-up
 once the format has stopped moving.
 
+### 3.1 Decided — the shape of the thing
+
+Settled 2026-08-18, in the owner's words: an HTML page a user opens on their PC that **simulates
+the light** so they can design an effect as they see fit, **give it a name**, and **push it to the
+light**, which **keeps it in one of its ten slots**. Plus a way to **see what is already on the
+light**, so a slot you like doesn't get overwritten and one you don't can be deleted. **Ring only**
+— the downlight is not coupled in.
+
+Three consequences that were open questions an hour ago and are now requirements:
+
+- **No live streaming preview.** The simulator runs entirely in the browser; the light is only
+  touched by discrete transactions — push, list, delete. This removes the "MQTT-while-dragging"
+  problem from §4's preview design, and with it most of the argument for `previewRecipe`.
+- **Names live on the device.** Not just in the editor. That is new NVS state and new commands
+  (§3.2), and it is what makes the slot browser meaningful rather than ten anonymous boxes.
+- **Slot management is a first-class feature**, not a side effect of saving. List, name, overwrite
+  with confirmation, delete. §3.2.
+
+**Design-blind is now the fidelity requirement.** Without live preview the user commits an effect
+to a ceiling they cannot see while designing, so the simulator is not a convenience — it is the
+only feedback loop before the fixture. That raises the stakes on §5's anti-drift work considerably,
+and it means the simulator should model the ring *honestly*, including the ugly parts: the gamma
+curve and the low-end collapse of §6. A designer who picks a beautiful gradient at brightness 16
+should see it go black in the browser, not in the ceiling.
+
+### 3.2 Slot management
+
+Ten slots, indices 6–15 in the existing 16-slot store. Each carries `{occupied, name, recipe}`.
+
+| Operation | Command | Notes |
+|---|---|---|
+| Browse | `getSlotName(n)` → `slotNameReport` | Ten cheap round trips builds the browser. Names only — the full recipe isn't needed until a slot is opened |
+| Open for editing | `getSlot(n)` → `slotReport` | Pulls the recipe back so an existing effect can be tweaked rather than rebuilt |
+| Push | `saveRecipe(n, bytes)` + `setSlotName(n, str)` | **Two commands, deliberately.** A 24-byte recipe plus a name in one frame crowds the payload budget (§4); split, each fits comfortably with room to spare |
+| Delete | `clearSlot(n)` | Marks unoccupied. **If the ring is currently running that slot, it must fall back to a built-in** — otherwise the light renders a hole |
+| Overwrite | client-side | The editor knows the slot is occupied from the browse step and confirms there; the firmware just takes the write |
+
+**Name length drives the payload arithmetic**, so it should be pinned early. Twelve characters
+makes `slotNameReport` about 14 bytes — trivially inside one frame, ten reads to populate the
+browser, and 120 bytes of NVS for the whole set.
+
+**The reseed hazard is the one real trap here.** `scene_store_init()` currently wipes and reseeds
+the entire store whenever `NVS_FMT_VER_CURRENT` doesn't match — correct for built-in defaults,
+**data loss for effects a user designed by hand.** User slots need either their own namespace with
+its own independently-versioned format, or a migration path rather than a reseed. The editor
+keeping a local library with export/import (§3.3) is the belt to that braces, not a substitute
+for it.
+
+### 3.3 What the page holds locally
+
+The browser keeps its own library, independent of the ten device slots: designs are saved to
+`localStorage` and exportable as files. You can keep thirty designs and choose which ten live on
+the fixture, effects survive a light being reflashed, and a design can be shared as a file. This
+is cheap to build and it is what makes the ten-slot limit stop feeling like a cap.
+
+The six built-ins ship as **read-only presets** in the editor — starting points to duplicate and
+tweak, not things to overwrite. "Start from Chase, widen the segment, make it warm, save as slot 3"
+is the flow that gets someone their first custom effect in under a minute.
+
 ## 4. Getting a recipe onto the device
 
 The transport is where the real engineering is, and it is the part with a known unknown.
@@ -190,16 +250,20 @@ designed on. Tier 2 keyframe lists are variable-length and will exceed it, which
 chunked `beginUpload / chunk(seq, bytes) / commit(crc)` triple. **Design the command set so
 chunking can be added without changing the single-frame path.**
 
-**Live preview vs. commit — take this seriously.** If every slider drag writes NVS, the flash wears
-out and the editor feels laggy. Two commands, not one:
+**`previewRecipe` is dropped** (§3.1). It existed to keep slider drags off the flash while the
+light mirrored the editor live, and there is no live mirroring — the browser simulates and the
+light is written only on an explicit push. `saveRecipe(slot, bytes)` validates and writes NVS, and
+that is the only write path. Flash wear stops being a design constraint at one write per deliberate
+push.
 
-- `previewRecipe(bytes)` — RAM only, renders immediately, **auto-reverts** after N seconds with no
-  further traffic, so a dropped connection can't strand the ring. Never persisted.
-- `saveRecipe(slot, bytes)` — validates, writes NVS, becomes selectable.
+One knock-on to keep: the render loop caches scene params and reloads them only when `ring.scene`
+changes, so **writing the slot that is currently running has to invalidate that cache** — otherwise
+you push an effect, the light says it saved, and nothing visibly changes until you switch effects
+and back. That is a confusing first-run experience for exactly the flow this feature is for.
 
-This also makes the editor feel live over Zigbee, which is otherwise a slow, lossy link to drag a
-slider over. Note the render loop caches scene params and only reloads when `ring.scene` changes —
-preview needs a way to invalidate that cache.
+**An optional `identifySlot(n)`** — run slot `n` for a few seconds and revert — is worth considering
+as a cheap "show me this one" from the slot browser without changing what the light is set to. Not
+required; it is the one piece of the dropped preview machinery that might still earn its place.
 
 **Read-back.** The effect attribute can't be reported (§1), so the device cannot volunteer a
 recipe. `getRecipe(slot)` → device answers with a `recipeReport` command carrying the blob;
@@ -217,10 +281,20 @@ Raising that bound to the number of populated slots is most of what makes custom
 — from HA *and* from the wall switch's 2× tap automation, for free, because both go through the
 same index.
 
-**HA naming.** The converter's `effect_list` is a static array in a JS file, so custom effects
-would appear as fixed slot names — `custom_1 … custom_10` — regardless of what you called them in
-the editor. Friendly names could live in NVS and be shown by the editor, but getting them into
-HA's dropdown means regenerating the converter. Open question (§8).
+**HA naming — now a live tension, since names are a requirement (§3.1).** Names are stored on the
+device and shown in the editor's slot browser, but the converter's `effect_list` is a *static array
+in a JS file* loaded once at Z2M startup. So HA's dropdown cannot follow a rename by itself. Three
+ways out, in increasing cost:
+
+1. **HA shows `custom_1 … custom_10`; the editor is where names live.** Zero extra machinery. You
+   pick "custom_3" in Home Assistant and have to remember what it is.
+2. **The editor emits an updated converter file** with the real names baked in, which you drop into
+   Z2M and restart. Real names in HA, at the cost of a Z2M restart per rename.
+3. **Make the converter read names off the device at startup.** Cleanest result, most moving parts,
+   and it hard-couples converter startup to the fixture being awake.
+
+Option 1 is the honest default and option 2 is a small addition on top of it — the editor already
+holds every name, so writing a converter file is templating. Open question (§8).
 
 ## 5. Keeping the simulator and the firmware honest
 
@@ -268,35 +342,58 @@ Each step is useful on its own and de-risks the next.
 4. **Tier 1 renderer, built-ins reimplemented as recipes.** Ship with `kEffects[]` retired and the
    six defaults expressed as `kDefaultRecipes[]` — same six names in `effect_list`, no breaking
    change for HA, but now every one of them is proof the format is expressive enough.
-5. **Recipe upload** — `previewRecipe` / `saveRecipe` / `getRecipe`, NVS blob format, slots 6–15,
-   `apply_effect()` bound raised.
-6. **The editor** — HTML page + simulator + golden vectors, plus the CLI/YAML underneath it.
+5. **Slots and their plumbing** — `saveRecipe` / `getSlot` / `getSlotName` / `setSlotName` /
+   `clearSlot`, the NVS blob format in its own independently-versioned keyspace (§3.2), slots 6–15,
+   `apply_effect()` bound raised, and the running-slot cache invalidation from §4.
+6. **The editor** — HTML page, ring simulator, slot browser, local library, golden vectors, plus
+   the CLI/YAML underneath it.
 7. **Tier 2 keyframes**, chunked upload if step 1 says it's needed.
 
 Step 4 is the one worth being deliberate about: reimplementing the six built-ins on the new engine
 *before* any custom slot exists means the format gets validated against known-good output, on the
 bench, with nothing else changing.
 
-## 8. Open questions — these need answers before this is a plan
+## 8. Questions — answered and still open
 
-1. **How custom is custom?** Tier 1 recipes (thousands of combinations, all bounded) or is there a
-   specific effect in your head that only Tier 2/3 can draw? A concrete "I want the ring to do X"
-   is worth more than any amount of the above.
-2. **Who edits effects — you, or the household?** "Me, at a laptop" points at the HTML editor and
-   the CLI. "Anyone, from the HA app" pulls option D forward and changes the priorities a lot.
-3. **Does the editor talk to the light live, or export a payload you paste?** Live means MQTT from
-   the browser (broker reachability, credentials); export means no infrastructure but a slower
-   loop. Live preview is most of the value, so this matters.
-4. **Do custom effects need names in Home Assistant**, or are `custom_1 … custom_10` acceptable?
-   Real names mean regenerating the converter from the device's stored names.
-5. **How many custom slots?** 10 free today. More means restructuring NVS; fewer is simpler and
-   probably plenty.
-6. **Should the downlight participate?** Every effect today is ring-only, and the downlight is a
-   separate entity by design. A recipe that also drives CW/WW (sunrise: ring warm + downlight
-   ramping up) is a genuinely different product — and it re-couples two things the two-endpoint
-   split deliberately separated. Probably no, but worth saying out loud.
-7. **Sync across fixtures?** Multiple cans running the same effect in phase is a real feature and a
-   real can of worms (time sync over Zigbee). Almost certainly out of scope, noted so it isn't
+### Answered 2026-08-18
+
+| Question | Answer |
+|---|---|
+| Live preview, or design offline and push? | **Offline.** The browser simulates; the light is touched only by discrete push / list / delete |
+| Named effects? | **Yes, and the names live on the device** — that is what makes the slot browser useful |
+| Slot management? | **Yes, first class.** See what's on the light, don't overwrite one you like, delete ones you don't |
+| How many slots? | **Ten** — the ten already free in the existing store |
+| Does the downlight participate? | **No.** Ring only; the two endpoints stay uncoupled |
+| Who is the editor for? | A user at a PC. Option D (Lovelace card) stays a later front-end, not a priority |
+
+### Still open
+
+1. **How does the page reach the light?** It doesn't stream, but push / list / delete are still
+   round trips to the fixture, and something has to carry them:
+   - **MQTT over WebSockets, straight from the browser.** Truly one static file, no server. Costs
+     a websocket listener on the broker and credentials entered in the page.
+   - **A small local helper** in `scripts/` that serves the page and proxies to MQTT. Not "just an
+     HTML file" any more, but no broker reconfiguration, no CORS, no credentials in a web page.
+   - **Export a payload you paste** into Z2M's frontend or an HA action. Zero infrastructure, but
+     "check what's on the light" becomes ten manual round trips, which mostly defeats the slot
+     browser.
+
+   This is the load-bearing one — it decides whether the deliverable is a file or a small program.
+2. **Real names in Home Assistant, or `custom_1 … custom_10`?** The three options and their costs
+   are in §4. Worth deciding early because option 3 changes the converter's startup contract.
+3. **How long is a name?** Twelve characters keeps every message comfortably inside one frame and
+   the whole set inside 120 bytes of NVS. Longer is possible; it needs to be pinned before the
+   command set is designed, not after.
+4. **How honest should the simulator be?** Raw pixels are right for understanding what the
+   firmware does; an approximation of the fixture's diffuser is right for judging what the room
+   will look like. A toggle is cheap and probably the answer. Related: the simulator **should**
+   reproduce the §6 low-end collapse rather than flattering the design — with no live preview,
+   the browser is the only place to discover it before the ceiling.
+5. **Is there a specific effect you want that recipes can't draw?** Still the highest-value
+   answer available. A concrete "I want the ring to do X" would either confirm Tier 1 is enough or
+   pull Tier 2 forward immediately.
+6. **Sync across fixtures?** Multiple cans running one effect in phase is a real feature and a real
+   can of worms (time sync over Zigbee). Almost certainly out of scope, noted so it isn't
    discovered late.
 
 ## 9. Deliberately not in this brainstorm
