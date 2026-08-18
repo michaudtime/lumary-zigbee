@@ -112,6 +112,17 @@ await test('the converter asks for identify', () => {
     assert.ok(calls.find((c) => c.fn === 'identify'), 'm.identify() was never called');
 });
 
+// ── OTA ───────────────────────────────────────────────────────────────────────
+// The firmware registers an OTA client on endpoint 1 and queries for an image
+// on first join (`addOTAClient` / `requestOTAUpdate` in src/zigbee_light.cpp).
+// Without m.ota() here the device asks and Z2M has nothing to answer with, so
+// the whole OTA path is dead from the coordinator side while looking healthy
+// from the firmware side -- exactly the state this repo was in until 2026-08-18.
+
+await test('the converter asks for OTA', () => {
+    assert.ok(calls.find((c) => c.fn === 'ota'), 'm.ota() was never called');
+});
+
 await test('identify does not contribute a second `effect` expose', () => {
     // Collect exposes from both the static array and all extend entries.
     // extend entries' exposes may be absent, an array, or a function.

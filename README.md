@@ -5,7 +5,6 @@ Replaces the Tuya WiFi controller inside a **Lumary 6" RGBAI recessed light** wi
 - Direct Zigbee binding to Inovelli Blue Series switches (hub-independent on/off, dimming, scene control)
 - 6 built-in lighting effects on the accent ring, with per-scene parameters stored on-device
 - Zigbee OTA firmware updates via Zigbee2MQTT
-- BLE OTA fallback (hold BOOT button 5s) for when the light is already in the ceiling
 
 ## Hardware
 
@@ -163,9 +162,20 @@ permanently is a future change.
 > above — after this update it needs a Z2M **re-interview** before the ring entity works, or the
 > upgrade will look broken even though it succeeded.
 
-**Primary:** Zigbee OTA via Zigbee2MQTT — drop `.ota` image in Z2M's `data/ota/` folder, update appears in HA dashboard.
+**Primary:** Zigbee OTA via Zigbee2MQTT — drop the `.ota` image in Z2M's `data/ota/` folder and
+the update appears in the HA dashboard.
 
-**Fallback:** Hold the BOOT button (GPIO 9) for 5 seconds — device enters BLE OTA mode, outer ring flashes blue, advertises as `LumaryOTA`.
+> **Both halves have to be present.** The firmware registers an OTA client and asks for an image on
+> every join; the converter's `m.ota()` is what lets Z2M answer. With the client but no `m.ota()` the
+> device queries into silence — no `update` entity, no image offered — and the firmware side looks
+> perfectly healthy the whole time. This repo was in exactly that state until 2026-08-18, so make
+> sure the converter in `data/external_converters/` is current before concluding OTA is broken.
+
+**There is no fallback.** A BLE OTA path was planned — `PIN_BLE_OTA_BUTTON` is still defined in
+`src/config.h` — but it was never implemented, and nothing references that pin. Do not count on it
+for a fixture already in the ceiling: if Zigbee OTA cannot reach a light, the only recovery is
+physical access to the USB port. Getting Zigbee OTA verified from an installed location is
+consequently the gate on signing off the board (plan task 6.4), not a nice-to-have.
 
 ### Building an OTA image
 
@@ -230,13 +240,15 @@ src/
   effect_params.h   — EffectType enum, EffectParams struct
   effects.h/.cpp    — 6 effect implementations + lookup table
   scene_store.h/.cpp — NVS scene persistence
-  zigbee_light.h/.cpp — Zigbee Extended Color Light clusters
-  zigbee_ota.h/.cpp — Zigbee OTA Upgrade cluster
-  ble_ota.h/.cpp    — NimBLE OTA fallback
+  zigbee_light.h/.cpp — Zigbee clusters for both endpoints, and the OTA client
+  brightness.h      — CIE 1931 lightness curve, generated tables
   main.cpp          — Setup, loop, watchdog
 test/
-  test_pixel_encode/ — Host unit tests for pixel encoding + color math
+  test_brightness/   — Host unit tests for the perceptual curve
+  test_identify/     — Host unit tests for the identify overlay
   test_light_state/  — Host unit tests for the Zigbee -> fixture translation
+  test_pixel_encode/ — Host unit tests for pixel encoding + color math
+  test_version/      — Host unit tests for the version block
 z2m/
   lumary-brain-revA.js — Z2M external converter
   test/             — Converter tests (stubbed, `node z2m/test/converter.test.mjs`)

@@ -192,6 +192,18 @@ export default {
         // `identify`, so unlike the stock Identify trigger-effects it cannot be
         // folded into the light's effect_list.
         m.identify(),
+        // Zigbee OTA. The firmware registers exactly one OTA client, on
+        // endpoint 1 (`addOTAClient` in src/zigbee_light.cpp) -- the spec allows
+        // one per device, not one per endpoint -- and queries for an image on
+        // first join. Without this extend the device asks and Z2M has nothing to
+        // answer with: no `update` entity, no image served.
+        //
+        // Z2M finds the image by manufacturer code + image type, both of which
+        // come from src/config.h, and only offers versions above the running
+        // ZB_FW_VERSION. Building and placing the image is in README "OTA
+        // Updates"; --file-version there must equal ZB_FW_VERSION or the
+        // coordinator will never offer it.
+        m.ota(),
         m.deviceAddCustomCluster('lumary', {
             ID: 0xfc00,
             attributes: {
