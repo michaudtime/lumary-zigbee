@@ -170,3 +170,127 @@ inline EffectParams light_state_resolve(const LightState* s, const EffectParams*
     }
     return p;
 }
+
+// ══ Two-entity model (item 9) ═════════════════════════════════════════════
+// The fixture's two light sources become two Zigbee endpoints and two Home
+// Assistant entities, so they can run at once -- white downlight plus coloured
+// accent ring, which the single-entity model could not express at all.
+//
+// Two purpose-built structs rather than two copies of one combined struct: the
+// downlight has no hue and the ring has no colour temperature, and a type that
+// carries fields its source does not have cannot tell a reader which are live.
+//
+// Everything the old model needed WHITE_SAT_THRESHOLD for is gone: a command
+// arrives AT the ring or AT the downlight, so there is nothing left to infer.
+
+struct DownlightState {
+    bool    on;
+    uint8_t level;    // Level Control cluster
+    uint8_t cct;      // 0 = fully warm (2700K) .. 255 = fully cool (6500K)
+};
+
+struct RingState {
+    bool      on;
+    uint8_t   level;
+    uint8_t   hue;
+    uint8_t   sat;
+    uint8_t   scene;  // index into the scene table
+    LightMode mode;   // MODE_SCENE = running an effect, MODE_COLOR = solid colour
+};
+
+struct FixtureState {
+    DownlightState down;
+    RingState      ring;
+};
+
+inline void downlight_state_init(DownlightState* s) {
+    s->on    = false;
+    s->level = 255;
+    s->cct   = 128;
+}
+
+inline void ring_state_init(RingState* s) {
+    s->on    = false;
+    s->level = 255;
+    s->hue   = 0;
+    s->sat   = 0;
+    s->scene = 0;
+    s->mode  = MODE_SCENE;
+}
+
+inline void fixture_state_init(FixtureState* s) {
+    downlight_state_init(&s->down);
+    ring_state_init(&s->ring);
+}
+
+// The downlight has no modes: it is on at a level, or it is off. The render
+// loop hands this straight to white_mix_gamma() along with `cct`.
+inline uint8_t downlight_level(const DownlightState* s) {
+    return s->on ? s->level : 0;
+}
+
+// The downlight endpoint advertises colour-temperature capability only, so it
+// always receives mireds -- there is no RGB fallback to infer warmth from.
+inline void downlight_set_cct(DownlightState* s, uint16_t mireds) {
+    s->cct = mireds_to_cct(mireds);
+}
+
+inline void ring_set_color(RingState* s, CRGB c) {
+    const HSV h = rgb_to_hsv(c);
+    s->hue  = h.h;
+    s->sat  = h.s;
+    s->mode = MODE_COLOR;
+}
+
+// Validated here rather than at the Zigbee adapter: the index arrives over the
+// air. An out-of-range value is ignored outright, leaving both the scene and
+// the mode untouched -- clamping would strand the ring on a scene nobody asked
+// for.
+inline void ring_set_scene(RingState* s, uint8_t index, uint8_t scene_count) {
+    if (scene_count == 0 || index >= scene_count) return;
+    s->scene = index;
+    s->mode  = MODE_SCENE;
+}
+
+// Leaves effect mode without disturbing the colour, which is what the ring
+// carries on showing. The firmware side of picking "none" in the dropdown.
+inline void ring_clear_scene(RingState* s) {
+    s->mode = MODE_COLOR;
+}
+
+inline uint8_t ring_effect_value(const RingState* s) {
+    return s->mode == MODE_SCENE ? s->scene : LIGHT_EFFECT_NONE;
+}
+
+inline void ring_next_scene(RingState* s, uint8_t scene_count) {
+    if (scene_count == 0) return;
+    ring_set_scene(s, uint8_t((s->scene + 1) % scene_count), scene_count);
+}
+
+inline void ring_prev_scene(RingState* s, uint8_t scene_count) {
+    if (scene_count == 0) return;
+    ring_set_scene(s, uint8_t((s->scene + scene_count - 1) % scene_count), scene_count);
+}
+
+// Combines the live ring state with the stored parameters of the active scene.
+// Unlike the old combined resolve there is no white branch -- the downlight is
+// a separate entity that never passes through here.
+inline EffectParams ring_state_resolve(const RingState* s, const EffectParams* scene) {
+    EffectParams p;
+    if (s->mode == MODE_COLOR) {
+        // `type` is unread in this branch: the render loop checks `mode` and
+        // calls fx_ring_solid without consulting it. It must still hold a valid
+        // index -- EffectParams is returned by value, and reading an
+        // indeterminate enum later is undefined behaviour. `scene` is always
+        // in range, ring_set_scene having rejected anything else.
+        p.type       = EffectType(s->scene);
+        p.hue        = s->hue;
+        p.sat        = s->sat;
+        p.brightness = s->level;
+        p.speed      = 0;
+    } else {
+        p            = *scene;
+        p.brightness = scale_level(scene->brightness, s->level);
+    }
+    return p;
+}
