@@ -1,7 +1,7 @@
 # Bench verification — everything outstanding
 
 **Date:** 2026-08-18
-**Status:** in progress — §§1-5 done 2026-08-18
+**Status:** in progress — §§1-6 done 2026-08-18
 
 Three separate bodies of work are merged to `main` and unverified on hardware. This consolidates
 their outstanding checks into one session, in an order chosen so that each check does not mask the
@@ -182,15 +182,20 @@ makes `ww + cw == total` exactly, so no output is lost to truncation at any leve
 
 ---
 
-## 6. Both sources at once — the point of item 9
+## 6. Both sources at once — PASS
 
-- [ ] Downlight at 2700 K, ring at a saturated colour, **both on**
-- [ ] Then run a ring effect over a lit downlight
+- [x] Downlight at 2700 K, ring at a saturated colour, **both on**
+- [x] A ring effect running over a lit downlight
 
-Expected: both visible and independent. This combination was impossible before today.
+Both visible, both independent. **This is the result item 9 existed to produce.** Under the old
+combined model `WHITE_SAT_THRESHOLD` in `src/light_state.h` made these mutually exclusive: a
+saturated colour meant the white string was off, which put the fixture's "gradient auxiliary light"
+selling point out of reach entirely. Two endpoints, two `FixtureState` sub-structs, two HA entities,
+and the exclusion is gone.
 
-- [ ] Judge whether the ring is washed out at full downlight. The balance between them is why gamma
-      was done first; if it looks wrong, that is a tuning question, not a bug.
+- [x] Ring balance against a lit downlight: no wash-out reported. Gamma going in first is what this
+      was resting on -- the ring's lower half now sits roughly 6x below its old linear behaviour, so
+      a coloured ring against a bright white downlight was the plausible failure and did not happen.
 
 ---
 
