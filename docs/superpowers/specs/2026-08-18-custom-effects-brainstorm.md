@@ -1,9 +1,9 @@
 # Custom effects — brainstorm
 
 **Date:** 2026-08-18
-**Status:** brainstorm, second pass. The shape is now decided (§3.1) — an offline HTML designer
-that pushes named effects into ten device slots, ring only. §8 records what is settled and what is
-still open.
+**Status:** brainstorm complete — every open question is answered (§8). An offline HTML designer,
+served by a small local helper, that pushes named effects into ten device slots. Ring only, Tier 1
+recipes, Tier 2 deferred on the evidence in §2.1. Ready to become an implementation plan.
 
 ## 1. What we have, and what "custom effects" would have to touch
 
@@ -70,13 +70,16 @@ Four independent axes — **palette × spatial mapping × motion × envelope** �
 a corner of that space. Replace `kEffects[]` dispatch with one renderer that interprets a struct:
 
 ```c
-struct EffectRecipe {          // ~24 bytes, one NVS blob per slot
+struct EffectRecipe {          // ~26 bytes, one NVS blob per slot
     uint8_t version;
     uint8_t palette_kind;      // solid | two-stop | hue-ramp | stop list
+    uint8_t palette_interp;    // blend | step        <- see below, this one earns its byte
     uint8_t stop_count;
     struct { uint8_t h, s, v; } stops[4];
     uint8_t spatial;           // uniform | gradient | segment | sparkle
     uint8_t span;              // width of the lit region
+    uint8_t falloff;           // segment tail, 0 = hard edge
+    uint8_t repeat;            // copies of the pattern around the ring
     uint8_t motion;            // still | rotate | bounce | random
     uint8_t direction;
     uint8_t speed;
@@ -87,6 +90,22 @@ struct EffectRecipe {          // ~24 bytes, one NVS blob per slot
 };
 ```
 
+**`palette_interp: step` is the highest-value byte in the struct**, and it was found by writing out
+the preset gallery (§2.1) rather than by designing the format. With `blend`, four stops are a
+gradient. With `step` — no interpolation between stops — four stops become **a sequence of four
+colours, held and switched**. That is most of what Tier 2 keyframes were for, in one flag, with no
+variable-length data and no chunked upload:
+
+| Wanted | With `step` |
+|---|---|
+| Police light | 2 stops (red, blue), stepped, uniform, rotate |
+| Team colours in sequence | 4 stops, stepped, uniform, rotate |
+| Hard-edged colour blocks around the ring | 4 stops, stepped, gradient spatial, rotate |
+
+What it still can't do is **unequal hold times, per-step fade durations, or more than four
+colours**. That is a much smaller gap than "no sequences at all", and it is the reason Tier 2 may
+never need to ship (§2.1).
+
 - **Cost:** medium. One new renderer, one NVS blob format, one or two new cluster commands.
 - **Gets you:** everything the six do, *plus* the combinations nobody wrote a function for — a
   slow two-colour breathing gradient, a wide warm comet, a three-stop sunset that drifts. The
@@ -96,6 +115,38 @@ struct EffectRecipe {          // ~24 bytes, one NVS blob per slot
 - **Testable on the host**, which the current effects are not — `effects.cpp` pulls `config.h`,
   which pulls `driver/ledc.h`. The file already flags this: moving `RING_NUM_LEDS` into a
   hardware-free header is the enabling step, and it is a two-line change.
+
+### 2.1 The preset gallery, used as a test of the format
+
+The editor ships with a starter gallery so a user has somewhere to begin instead of a blank
+slider panel (decided 2026-08-18). Writing that gallery out is also the cheapest available test of
+whether the recipe format is expressive enough — **if half the presets need Tier 2, Tier 2 ships
+in v1; if almost none do, it may never ship.** Presets are pure data, so the gallery costs a JSON
+array in the page.
+
+| Preset | Recipe | Tier |
+|---|---|---|
+| Warm Gradient | 2 stops, blend, gradient, rotate | 1 |
+| Color Gradient | hue ramp, gradient, rotate | 1 |
+| Breathing | 1 stop, uniform, triangle envelope | 1 |
+| Color Cycle | hue ramp, uniform, rotate in hue | 1 |
+| Chase | 1 stop, segment span 1, rotate | 1 |
+| Nightlight | 1 warm stop, uniform, still | 1 |
+| **Comet** | 1 stop, segment span ~8 with falloff, rotate | 1 (needs `falloff`) |
+| **Slow Sunset** | 3 stops amber→magenta→indigo, blend, gradient, very slow rotate | 1 |
+| **Twin Pulse** | 2 stops, segment, `repeat` 2, rotate | 1 (needs `repeat`) |
+| **Ocean Drift** | 3 teal/blue stops, gradient, slow rotate + gentle breathe | 1 |
+| **Police** | 2 stops red/blue, **step**, uniform, fast rotate | 1 (needs `palette_interp`) |
+| **Team Colours** | up to 4 stops, **step**, uniform, rotate | 1 (needs `palette_interp`) |
+| **Sparkle** | palette + `spatial: sparkle` | 1 (needs a seeded PRNG — §5) |
+| **Candle** | warm stops, uniform, noise envelope | 1 (needs a seeded PRNG — §5) |
+| Uneven sequences, per-step fades, >4 colours | — | **2** |
+
+**Fourteen of fifteen land in Tier 1**, and the three fields that got them there (`falloff`,
+`repeat`, `palette_interp`) cost three bytes between them. This is the evidence for **shipping
+Tier 1 alone and treating Tier 2 as genuinely deferred** rather than imminent — the case for
+keyframes has to be made by an effect somebody actually wants and cannot get, and right now there
+isn't one.
 
 ### Tier 2 — keyframe sequences
 
@@ -188,6 +239,12 @@ light**, which **keeps it in one of its ten slots**. Plus a way to **see what is
 light**, so a slot you like doesn't get overwritten and one you don't can be deleted. **Ring only**
 — the downlight is not coupled in.
 
+Reached over a small **local helper** rather than the browser talking to MQTT directly: it serves
+the page and proxies push / list / delete, so there is no broker reconfiguration, no CORS, and no
+credentials typed into a web page. The cost is that the deliverable is a thing you run, not a file
+you double-click — accepted deliberately, because "see what's on the light" is the requirement that
+gets painful without a connection.
+
 Three consequences that were open questions an hour ago and are now requirements:
 
 - **No live streaming preview.** The simulator runs entirely in the browser; the light is only
@@ -235,9 +292,14 @@ The browser keeps its own library, independent of the ten device slots: designs 
 the fixture, effects survive a light being reflashed, and a design can be shared as a file. This
 is cheap to build and it is what makes the ten-slot limit stop feeling like a cap.
 
-The six built-ins ship as **read-only presets** in the editor — starting points to duplicate and
-tweak, not things to overwrite. "Start from Chase, widen the segment, make it warm, save as slot 3"
-is the flow that gets someone their first custom effect in under a minute.
+**The editor ships with a preset gallery** — the six built-ins plus the derived starters in §2.1 —
+all read-only, all duplicate-and-tweak. Nobody should meet this tool as a blank panel of fifteen
+sliders. "Start from Chase, widen the segment, add a tail, make it warm, save as slot 3" is the
+flow that gets someone their first custom effect in under a minute, and it teaches the parameter
+space by example on the way through.
+
+The gallery is pure data, so it costs a JSON array in the page — and as §2.1 argues, writing it
+out is also how the recipe format gets validated before any firmware is committed to it.
 
 ## 4. Getting a recipe onto the device
 
@@ -312,6 +374,21 @@ Golden vectors are the pragmatic default; WASM is the right answer if the render
 that maintaining a JS twin is real work. Either way the renderer must be host-clean, which means
 `RING_NUM_LEDS` moves out of `config.h` first.
 
+**Two specific drift hazards, both worth knowing before the first line is written:**
+
+- **The PRNG behind `sparkle` and `candle` must be seeded and deterministic**, or the golden
+  vectors can't exist at all. A small xorshift is fine, but **JavaScript has no native uint32
+  arithmetic** — `*` overflows into doubles and `<<` is signed — so the JS twin needs `Math.imul`
+  and `>>> 0` in exactly the right places. This is the single most likely source of a simulator
+  that looks right and is wrong. It is also exactly what golden vectors catch.
+- **Integer division and truncation.** The firmware's colour maths is full of `>> 8` and integer
+  division that JS will happily do in floating point. Every operation in the JS renderer has to
+  truncate where the C++ does.
+
+Given the design-blind workflow (§3.1), the vectors should cover the **low end specifically** —
+brightness 8, 16, 24 — not just the pretty middle of the range, because that is where §6's
+collapse lives and where the simulator most needs to be trusted.
+
 ## 6. The thing this change should fix while it's in there
 
 The bench found effects collapsing to black below roughly brightness 20, and diagnosed it
@@ -353,48 +430,26 @@ Step 4 is the one worth being deliberate about: reimplementing the six built-ins
 *before* any custom slot exists means the format gets validated against known-good output, on the
 bench, with nothing else changing.
 
-## 8. Questions — answered and still open
+## 8. Decisions
 
-### Answered 2026-08-18
+All settled 2026-08-18. Nothing in this section is open.
 
-| Question | Answer |
+| Question | Decision |
 |---|---|
 | Live preview, or design offline and push? | **Offline.** The browser simulates; the light is touched only by discrete push / list / delete |
-| Named effects? | **Yes, and the names live on the device** — that is what makes the slot browser useful |
-| Slot management? | **Yes, first class.** See what's on the light, don't overwrite one you like, delete ones you don't |
+| How does the page reach the light? | **A small local helper** in `scripts/` that serves the page and proxies to MQTT. No broker reconfiguration, no CORS, no credentials in a web page |
+| Named effects? | **Yes, stored on the device**, 12 characters |
+| Names in Home Assistant? | **No — `custom_1 … custom_10`.** Names live in the editor. Rules out the converter regeneration and the read-names-at-startup options in §4 |
+| Slot management? | **Yes, first class.** Browse before overwriting, delete what you don't want |
 | How many slots? | **Ten** — the ten already free in the existing store |
 | Does the downlight participate? | **No.** Ring only; the two endpoints stay uncoupled |
-| Who is the editor for? | A user at a PC. Option D (Lovelace card) stays a later front-end, not a priority |
+| Simulator fidelity | **Honest, including the ugly parts.** Better to find the low-end collapse in the browser than in the ceiling |
+| Starting points for the user | **A preset gallery** (§2.1) — the six built-ins plus derived starters, read-only, duplicate-and-tweak |
+| Local library in the browser | **Yes** — `localStorage` plus file export, so you can hold more designs than the ten that fit on the fixture |
+| Tier 2 keyframes? | **Deferred**, on the §2.1 evidence: fourteen of fifteen wanted presets are Tier 1, and `palette_interp: step` covers the sequence cases for one byte |
 
-### Still open
-
-1. **How does the page reach the light?** It doesn't stream, but push / list / delete are still
-   round trips to the fixture, and something has to carry them:
-   - **MQTT over WebSockets, straight from the browser.** Truly one static file, no server. Costs
-     a websocket listener on the broker and credentials entered in the page.
-   - **A small local helper** in `scripts/` that serves the page and proxies to MQTT. Not "just an
-     HTML file" any more, but no broker reconfiguration, no CORS, no credentials in a web page.
-   - **Export a payload you paste** into Z2M's frontend or an HA action. Zero infrastructure, but
-     "check what's on the light" becomes ten manual round trips, which mostly defeats the slot
-     browser.
-
-   This is the load-bearing one — it decides whether the deliverable is a file or a small program.
-2. **Real names in Home Assistant, or `custom_1 … custom_10`?** The three options and their costs
-   are in §4. Worth deciding early because option 3 changes the converter's startup contract.
-3. **How long is a name?** Twelve characters keeps every message comfortably inside one frame and
-   the whole set inside 120 bytes of NVS. Longer is possible; it needs to be pinned before the
-   command set is designed, not after.
-4. **How honest should the simulator be?** Raw pixels are right for understanding what the
-   firmware does; an approximation of the fixture's diffuser is right for judging what the room
-   will look like. A toggle is cheap and probably the answer. Related: the simulator **should**
-   reproduce the §6 low-end collapse rather than flattering the design — with no live preview,
-   the browser is the only place to discover it before the ceiling.
-5. **Is there a specific effect you want that recipes can't draw?** Still the highest-value
-   answer available. A concrete "I want the ring to do X" would either confirm Tier 1 is enough or
-   pull Tier 2 forward immediately.
-6. **Sync across fixtures?** Multiple cans running one effect in phase is a real feature and a real
-   can of worms (time sync over Zigbee). Almost certainly out of scope, noted so it isn't
-   discovered late.
+The one thing still genuinely unknown is **the ZCL payload budget**, and it is a measurement rather
+than a decision — step 1 of §7 settles it.
 
 ## 9. Deliberately not in this brainstorm
 
