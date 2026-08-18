@@ -54,6 +54,10 @@ await test('effect list is `none` plus the six firmware effects, none first', ()
     ]);
 });
 
+await test('effect expose is attached to the ring endpoint', () => {
+    assert.equal(effect.endpoint, 'ring');
+});
+
 await test('the old effect_select expose is gone', () => {
     assert.equal(def.exposes.find((x) => x.name === 'effect_select'), undefined);
 });
