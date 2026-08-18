@@ -11,6 +11,7 @@ class Enum {
     withDescription(description) { this.description = description; return this; }
     withCategory(category) { this.category = category; return this; }
     withLabel(label) { this.label = label; return this; }
+    withEndpoint(endpoint) { this.endpoint = endpoint; return this; }
 }
 
 export const presets = {enum: (name, access, values) => new Enum(name, access, values)};

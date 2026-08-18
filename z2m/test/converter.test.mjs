@@ -47,10 +47,10 @@ await test('effect is readable, not write-only like the Identify preset', () => 
     assert.equal(effect.access, 0b111);
 });
 
-await test('effect list is `none` plus the eight firmware effects, none first', () => {
+await test('effect list is `none` plus the six firmware effects, none first', () => {
     assert.deepEqual(effect.values, [
-        'none', 'static_white', 'static_color', 'warm_gradient',
-        'color_gradient', 'breathing', 'color_cycle', 'chase', 'nightlight',
+        'none', 'warm_gradient', 'color_gradient', 'breathing',
+        'color_cycle', 'chase', 'nightlight',
     ]);
 });
 
@@ -60,25 +60,35 @@ await test('the old effect_select expose is gone', () => {
 
 // ── light() must not contribute a second, dead effect list ────────────────
 
-const lightArgs = calls.find((c) => c.fn === 'light').args;
+const lightCalls  = calls.filter((c) => c.fn === 'light');
+const downArgs    = lightCalls.find((c) => c.args.endpointNames?.includes('downlight')).args;
+const ringArgs    = lightCalls.find((c) => c.args.endpointNames?.includes('ring')).args;
 
-await test('light() effect is off (else HA unions in 6 dead Identify effects)', () => {
-    assert.equal(lightArgs.effect, false);
+await test('exposes exactly two lights, one per endpoint', () => {
+    assert.equal(lightCalls.length, 2);
 });
 
-await test('light() powerOnBehavior is off (no StartUpOnOff in firmware yet)', () => {
-    assert.equal(lightArgs.powerOnBehavior, false);
+await test('the downlight carries colour temperature and no colour', () => {
+    assert.deepEqual(downArgs.colorTemp.range, [154, 370]);
+    assert.equal(downArgs.colorTemp.startup, false);
+    assert.equal(downArgs.color, false);
 });
 
-await test('colour temperature range still matches CCT_MIRED_COOL/WARM', () => {
-    assert.deepEqual(lightArgs.colorTemp.range, [154, 370]);
+await test('the ring carries colour and no colour temperature', () => {
+    assert.deepEqual(ringArgs.color, {modes: ['xy']});
+    assert.equal(ringArgs.colorTemp, undefined);
 });
 
-await test('light() colorTemp.startup is off (no StartUpColorTemperature either)', () => {
-    // Asking for colorTemp makes light() add a `color_temp_startup` control
-    // backed by Colour 0x4010, which the firmware answers with
-    // UNSUPPORTED_ATTRIBUTE -- observed in the Z2M log against the fixture.
-    assert.equal(lightArgs.colorTemp.startup, false);
+await test('both lights switch off the dead stock controls', () => {
+    for (const args of [downArgs, ringArgs]) {
+        assert.equal(args.effect, false);
+        assert.equal(args.powerOnBehavior, false);
+    }
+});
+
+await test('the endpoint map names both endpoints', () => {
+    assert.deepEqual(def.endpoint({}), {downlight: 1, ring: 2});
+    assert.equal(def.meta.multiEndpoint, true);
 });
 
 // ── identify ──────────────────────────────────────────────────────────────
@@ -120,7 +130,7 @@ await test('selecting an effect sends setEffect with the firmware index', async 
     let sent;
     const entity = {command: async (cluster, cmd, payload) => { sent = {cluster, cmd, payload}; }};
     const res = await tzEffect.convertSet(entity, 'effect', 'color_cycle', {});
-    assert.deepEqual(sent, {cluster: 'lumary', cmd: 'setEffect', payload: {effect: 5}});
+    assert.deepEqual(sent, {cluster: 'lumary', cmd: 'setEffect', payload: {effect: 3}});
     assert.deepEqual(res, {state: {effect: 'color_cycle'}});
 });
 
@@ -150,7 +160,7 @@ await test('reading the effect reads the custom cluster attribute', async () => 
 const fz = def.fromZigbee.find((c) => c.cluster === 'lumary');
 
 await test('an effect report maps the index back to its name', () => {
-    assert.deepEqual(fz.convert({}, {data: {effect: 6}}), {effect: 'chase'});
+    assert.deepEqual(fz.convert({}, {data: {effect: 4}}), {effect: 'chase'});
 });
 
 await test('0xFF reads back as `none`', () => {
