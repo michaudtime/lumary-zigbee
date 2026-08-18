@@ -30,7 +30,12 @@ const NO_STOP = stop(0, 0, 0);
 
 // Fills in the parts almost every preset leaves at their defaults, so each
 // entry below shows only what makes it what it is.
-function recipe(fields) {
+//
+// Named makeRecipe rather than recipe because the standalone build flattens
+// every module into one scope, where `recipe` is the editor's working copy.
+// scripts/build-designer-single.py fails loudly on a collision like that, but
+// not colliding in the first place is better.
+function makeRecipe(fields) {
     const stops = (fields.stops ?? [stop(0, 255, 255)]).slice(0, 4);
     return {
         version:        RECIPE_VERSION,
@@ -61,7 +66,7 @@ export const PRESETS = [
         name: 'Warm Gradient',
         builtin: true,
         note: 'Amber to blue, sweeping round the ring.',
-        recipe: recipe({
+        recipe: makeRecipe({
             palette_kind: PALETTE_STOPS,
             stops: [stop(21, 255, 200), stop(170, 255, 255)],
             spatial: SPATIAL_GRADIENT, motion: MOTION_ROTATE, speed: 60,
@@ -72,7 +77,7 @@ export const PRESETS = [
         name: 'Color Gradient',
         builtin: true,
         note: 'The whole hue circle laid around the ring, rotating.',
-        recipe: recipe({
+        recipe: makeRecipe({
             palette_kind: PALETTE_HUE_RAMP,
             spatial: SPATIAL_GRADIENT, motion: MOTION_ROTATE, speed: 60,
             brightness: 200,
@@ -87,7 +92,7 @@ export const PRESETS = [
         // match kDefaultRecipes[] exactly or the gallery ships a "Breathing"
         // that encodes differently from the one the fixture stores. The same
         // trap light_state.h documents for EffectParams::type under MODE_COLOR.
-        recipe: recipe({
+        recipe: makeRecipe({
             speed: 0,
             envelope: ENV_BREATHE, envelope_depth: 255, envelope_speed: 80,
         }),
@@ -96,7 +101,7 @@ export const PRESETS = [
         name: 'Color Cycle',
         builtin: true,
         note: 'The whole ring one colour, walking the hue circle.',
-        recipe: recipe({
+        recipe: makeRecipe({
             palette_kind: PALETTE_HUE_RAMP,
             motion: MOTION_ROTATE, speed: 100, brightness: 200,
         }),
@@ -105,7 +110,7 @@ export const PRESETS = [
         name: 'Chase',
         builtin: true,
         note: 'A single lit pixel travelling round.',
-        recipe: recipe({
+        recipe: makeRecipe({
             spatial: SPATIAL_SEGMENT, span: 4,
             motion: MOTION_ROTATE, speed: 120,
         }),
@@ -114,7 +119,7 @@ export const PRESETS = [
         name: 'Nightlight',
         builtin: true,
         note: 'Dim warm white, still. Mixed from the RGB dice.',
-        recipe: recipe({
+        recipe: makeRecipe({
             speed: 0,                       // unread under MOTION_STILL; see Breathing
             stops: [stop(21, 180, 255)], brightness: 50,
         }),
@@ -124,7 +129,7 @@ export const PRESETS = [
     {
         name: 'Comet',
         note: 'A bright head with a fading tail. Drag falloff to lengthen it.',
-        recipe: recipe({
+        recipe: makeRecipe({
             palette_kind: PALETTE_STOPS,
             stops: [stop(30, 255, 255), stop(30, 255, 0)],
             spatial: SPATIAL_SEGMENT, span: 12, falloff: 40,
@@ -134,7 +139,7 @@ export const PRESETS = [
     {
         name: 'Slow Sunset',
         note: 'Amber through magenta to indigo, drifting slowly.',
-        recipe: recipe({
+        recipe: makeRecipe({
             palette_kind: PALETTE_STOPS,
             stops: [stop(16, 255, 255), stop(224, 220, 200), stop(170, 255, 150)],
             spatial: SPATIAL_GRADIENT, motion: MOTION_ROTATE, speed: 20,
@@ -144,7 +149,7 @@ export const PRESETS = [
     {
         name: 'Twin Pulse',
         note: 'Two chasers opposite each other. `repeat` is what doubles them.',
-        recipe: recipe({
+        recipe: makeRecipe({
             spatial: SPATIAL_SEGMENT, span: 8, falloff: 16, repeat: 2,
             motion: MOTION_ROTATE, speed: 160,
         }),
@@ -152,7 +157,7 @@ export const PRESETS = [
     {
         name: 'Ocean Drift',
         note: 'Teals and blues, drifting, with a slow swell over the top.',
-        recipe: recipe({
+        recipe: makeRecipe({
             palette_kind: PALETTE_STOPS,
             stops: [stop(120, 255, 255), stop(150, 230, 200), stop(170, 255, 255)],
             spatial: SPATIAL_GRADIENT, motion: MOTION_ROTATE, speed: 30,
@@ -163,7 +168,7 @@ export const PRESETS = [
     {
         name: 'Police',
         note: 'Red and blue, alternating hard. Stepping is what stops it blending.',
-        recipe: recipe({
+        recipe: makeRecipe({
             palette_kind: PALETTE_STOPS, palette_interp: INTERP_STEP,
             stops: [stop(0, 255, 255), stop(160, 255, 255)],
             motion: MOTION_ROTATE, speed: 200,
@@ -172,7 +177,7 @@ export const PRESETS = [
     {
         name: 'Team Colours',
         note: 'Up to four colours in sequence. Swap the stops for your own.',
-        recipe: recipe({
+        recipe: makeRecipe({
             palette_kind: PALETTE_STOPS, palette_interp: INTERP_STEP,
             stops: [stop(0, 255, 255), stop(64, 255, 200),
                     stop(128, 255, 255), stop(200, 200, 180)],
@@ -182,7 +187,7 @@ export const PRESETS = [
     {
         name: 'Sparkle',
         note: 'Every pixel twinkles on its own phase.',
-        recipe: recipe({
+        recipe: makeRecipe({
             palette_kind: PALETTE_HUE_RAMP,
             spatial: SPATIAL_SPARKLE, speed: 180,
         }),
@@ -190,7 +195,7 @@ export const PRESETS = [
     {
         name: 'Candle',
         note: 'Warm, with a noise envelope so it flickers instead of strobing.',
-        recipe: recipe({
+        recipe: makeRecipe({
             stops: [stop(21, 200, 255)],
             envelope: ENV_NOISE, envelope_depth: 160, envelope_speed: 190,
             brightness: 180,
@@ -199,7 +204,7 @@ export const PRESETS = [
     {
         name: 'Heartbeat',
         note: 'Fast attack, slow decay. The pulse envelope, at depth.',
-        recipe: recipe({
+        recipe: makeRecipe({
             stops: [stop(250, 255, 255)],
             envelope: ENV_PULSE, envelope_depth: 230, envelope_speed: 150,
         }),
@@ -207,7 +212,7 @@ export const PRESETS = [
     {
         name: 'Sweep',
         note: 'A band running out and back rather than round and round.',
-        recipe: recipe({
+        recipe: makeRecipe({
             palette_kind: PALETTE_STOPS,
             stops: [stop(100, 255, 255), stop(140, 255, 120)],
             spatial: SPATIAL_SEGMENT, span: 30, falloff: 30,
@@ -217,7 +222,7 @@ export const PRESETS = [
     {
         name: 'Rise',
         note: 'A saw envelope: swells, then resets. Slow it right down for a sunrise.',
-        recipe: recipe({
+        recipe: makeRecipe({
             palette_kind: PALETTE_STOPS,
             stops: [stop(10, 255, 255), stop(30, 200, 255)],
             spatial: SPATIAL_GRADIENT,

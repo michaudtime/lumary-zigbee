@@ -10,6 +10,18 @@ python scripts/serve-designer.py
 then open the URL it prints. It has to be served rather than opened from disk:
 the page is ES modules, and browsers refuse to load those over `file://`.
 
+**Or build a standalone copy** — one `.html` you can open from disk or send to
+someone:
+
+```
+python scripts/build-designer-single.py
+```
+
+That flattens the modules into the page. It is generated, never hand-edited, so
+the standalone copy cannot drift from the modules the tests cover. Because the
+flattened modules share one scope, the script fails loudly on a top-level name
+collision rather than emitting a subtly broken page.
+
 ## What it is for
 
 The fixture is in a ceiling. You cannot watch it while you drag a slider, so
@@ -65,6 +77,8 @@ want to see what is actually on the wire.
 | `gamma.mjs` | generated from `src/brightness.h` — do not edit |
 | `golden-vectors.json` | generated from the firmware renderer — do not edit |
 | `test/render.test.mjs` | `node tools/designer/test/render.test.mjs` |
+
+The standalone build lands in `build/`, which is not tracked.
 
 ## Not built yet
 

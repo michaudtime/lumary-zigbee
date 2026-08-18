@@ -470,8 +470,50 @@ function renderSlots() {
 
 // ── local library ─────────────────────────────────────────────────────────
 const LIB_KEY = 'lumary.designer.library';
-const loadLib = () => JSON.parse(localStorage.getItem(LIB_KEY) || '[]');
-const saveLib = (l) => localStorage.setItem(LIB_KEY, JSON.stringify(l));
+
+// localStorage is not always reachable -- a sandboxed frame, a browser with
+// site data blocked, or private browsing can all deny it, and the denial is a
+// thrown exception rather than a null. Unguarded, that exception happened at
+// startup and took the whole page down with it: no ring, no controls, no
+// obvious cause. The library degrades to memory-only instead, which loses
+// persistence and nothing else.
+let memoryLib = [];
+let storageWorks = true;
+
+function loadLib() {
+    if (!storageWorks) return memoryLib;
+    try {
+        return JSON.parse(localStorage.getItem(LIB_KEY) || '[]');
+    } catch {
+        storageWorks = false;
+        return memoryLib;
+    }
+}
+
+function saveLib(entries) {
+    memoryLib = entries;
+    if (!storageWorks) return;
+    try {
+        localStorage.setItem(LIB_KEY, JSON.stringify(entries));
+    } catch {
+        storageWorks = false;
+        noteStorageUnavailable();
+    }
+}
+
+// Said once, where the library is, rather than in an alert -- losing
+// persistence is worth knowing about but is not worth interrupting for.
+function noteStorageUnavailable() {
+    const host = document.getElementById('library');
+    if (!host || document.getElementById('storagewarn')) return;
+    const p = document.createElement('p');
+    p.id = 'storagewarn';
+    p.className = 'sub';
+    p.textContent =
+        'This browser will not let the page store data, so the library lasts ' +
+        'only until you close the tab. Export anything you want to keep.';
+    host.parentNode.insertBefore(p, host);
+}
 
 function renderLibrary() {
     const host = document.getElementById('library');
@@ -519,14 +561,29 @@ document.getElementById('export').onclick = () => {
     w.document.write('<pre>' + JSON.stringify(blob, null, 2) + '</pre>');
 };
 
+try {
+    localStorage.getItem(LIB_KEY);
+} catch {
+    storageWorks = false;
+}
+
 const nameInput = document.getElementById('name');
 nameInput.oninput = () => {
     document.getElementById('namelen').textContent = nameInput.value.length;
 };
 
+// The ring is the point of the page, so it starts regardless of whether the
+// side panels managed to build. Anything that throws here is reported next to
+// the thing that failed rather than taking the tool down with it.
 buildPanel();
 renderSlots();
-renderLibrary();
+try {
+    if (!storageWorks) noteStorageUnavailable();
+    renderLibrary();
+} catch {
+    storageWorks = false;
+    noteStorageUnavailable();
+}
 requestAnimationFrame(frame);
 </script>
 </body>
