@@ -282,6 +282,44 @@ it would confirm whether the command errors or is silently absorbed.
 
 ## 8. Persistence and rejoin
 
+### CRITICAL, found and fixed mid-section: the fixture would not boot without USB
+
+Discovered 2026-08-18 while setting up the power-cycle test, and fixed in `ab5dfe9`.
+
+Every bench session to date had the module USB-tethered to a PC. Pulling mains therefore never reset
+the MCU -- USB kept it alive -- so **this board had never once cold-booted standalone.** The first
+time it did, the downlight came on at full and the device was unreachable over Zigbee.
+
+Cause: `setup()` opened with an unbounded wait.
+
+```cpp
+Serial.begin(115200);
+while (!Serial) delay(10);      // never returns with no USB host
+```
+
+`platformio.ini` builds with `-DARDUINO_USB_CDC_ON_BOOT=1`, so `Serial` is the USB CDC and its
+`operator bool()` stays false until a host enumerates it. With no PC attached, `setup()` never
+returned and everything below that line was dead code:
+
+- `led_driver_init()` never configured the white PWM GPIO. The pin stayed in its reset default, the
+  L-SD8E1 saw no gating signal, and the driver ran at 100% -- **downlight full on**.
+- `zigbee_light_init()` never started the radio -- **device unreachable**.
+- `loop()` never ran -- ring dark.
+
+Fixed by bounding the wait to one second, which still catches `boot ok` on the monitor at the bench
+without stranding a mains-only boot.
+
+**This blocked section 11 outright** -- there is no USB host in a ceiling, so the fixture could never
+have worked installed. It is the single most valuable thing this bench session found, and it was
+only reachable by testing the real power-up path rather than a tethered one.
+
+Lesson worth carrying: a bench rig that differs from the deployed configuration in *any* powered
+respect will hide exactly the faults that matter. Sections 1-7 all passed while this was live.
+
+### The section proper
+
+
+
 - [ ] Select an effect, power cycle, and watch what HA shows
 
 Expected: the ring returns to its stored effect, and **HA displays it** rather than sticking at
