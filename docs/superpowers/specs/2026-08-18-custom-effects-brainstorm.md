@@ -1,9 +1,16 @@
 # Custom effects — brainstorm
 
 **Date:** 2026-08-18
-**Status:** brainstorm complete — every open question is answered (§8). An offline HTML designer,
-served by a small local helper, that pushes named effects into ten device slots. Ring only, Tier 1
-recipes, Tier 2 deferred on the evidence in §2.1. Ready to become an implementation plan.
+**Status:** decided, and **steps 3, 4 and 6 of §7 are built** — the recipe format, the renderer,
+the golden vectors, and the designer with its preset gallery. Slots and transport (step 5) are
+next; the payload-budget spike (step 1) and Tier 0 (step 2) were skipped as unnecessary, since
+recipes replaced the parameter-editing stepping stone outright and the 27-byte struct fits one
+frame with room to spare.
+
+Two findings from the build worth carrying forward: the low-end collapse improved more than
+expected (§6), and an unread wire byte still has to match the firmware exactly — the preset
+gallery drifted from `kDefaultRecipes[]` on `speed` under `MOTION_STILL`, and the byte-comparison
+test caught it.
 
 ## 1. What we have, and what "custom effects" would have to touch
 

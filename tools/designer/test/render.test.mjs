@@ -23,6 +23,7 @@ import {
     render, decode, encode, validate, fxHash,
     RECIPE_BYTES, RECIPE_VERSION,
 } from '../recipe.mjs';
+import {PRESETS} from '../presets.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const golden = JSON.parse(
@@ -122,6 +123,45 @@ for (const c of golden.cases) {
         }
     });
 }
+
+console.log('\nthe preset gallery');
+
+test('every preset is valid and survives a round trip', () => {
+    for (const p of PRESETS) {
+        assert.equal(validate(p.recipe), null, `${p.name} was rejected: ${validate(p.recipe)}`);
+        const bytes = encode(p.recipe);
+        assert.deepEqual(Array.from(encode(decode(bytes))), Array.from(bytes),
+            `${p.name} does not survive encode/decode`);
+    }
+});
+
+// The gallery's first six ARE the fixture's built-in effects, and the golden
+// vectors were generated from the firmware's kDefaultRecipes[]. Comparing the
+// two byte for byte is what stops the editor quietly offering a "Chase" that
+// is not the Chase the light runs.
+test('the built-in presets are byte-identical to the firmware defaults', () => {
+    const builtins = PRESETS.filter((p) => p.builtin);
+    assert.equal(builtins.length, 6, 'expected six built-in presets');
+
+    for (let i = 0; i < builtins.length; i++) {
+        const fromFirmware = fromHex(golden.cases[i].bytes);
+        const fromGallery = encode(builtins[i].recipe);
+        assert.deepEqual(
+            Array.from(fromGallery), Array.from(fromFirmware),
+            `preset "${builtins[i].name}" has drifted from the firmware default ` +
+            `"${golden.cases[i].name}"`,
+        );
+    }
+});
+
+test('every preset renders without throwing', () => {
+    for (const p of PRESETS) {
+        for (const t of [0, 137, 4321]) {
+            const out = render(p.recipe, t, 255, true);
+            assert.equal(out.length, 62 * 3, `${p.name} rendered the wrong buffer`);
+        }
+    }
+});
 
 console.log('\nbehaviour the vectors do not cover');
 
