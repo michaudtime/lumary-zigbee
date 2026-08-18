@@ -365,24 +365,34 @@ NVS scene storage had never run on hardware before today -- the earlier bench se
 
 ---
 
-## 9. The switch, both bindings
+## 9. The switch, both bindings — PASS
 
-Bind from the Inovelli's endpoint **2** (the paddle) to both fixture endpoints, clusters `genOnOff`
-and `genLevelCtrl`:
+The binding as found at the start of the session was wrong twice over: sourced from the Inovelli's
+endpoint **3** (the config button) rather than endpoint **2** (the paddle), and carrying `genOnOff`
+only, with no `genLevelCtrl`. Rebuilt as:
 
 ```
-switch ep2 -> fixture ep1   (downlight)
-switch ep2 -> fixture ep2   (accent ring)
+switch ep2 -> fixture ep1   (downlight)     genOnOff + genLevelCtrl
+switch ep2 -> fixture ep2   (accent ring)   genOnOff + genLevelCtrl
 ```
 
-- [ ] Tap down: **both** sources go off
-- [ ] Tap up: **both** return, each at its own level and colour
-- [ ] Hold: both dim
-- [ ] **Drift them apart deliberately** — ring off, downlight on — then tap up
+Fixture endpoint 2 appeared in the destination dropdown, which is itself confirmation that the
+re-interview took and Z2M is working from the new two-endpoint descriptor.
 
-That last one is the important one. It is where a `Toggle` command would show itself, and the whole
-binding design rests on the switch sending discrete `On`/`Off`. That was confirmed once; this
-confirms it under the two-endpoint arrangement.
+- [x] Tap down: both sources go off
+- [x] Tap up: both return, each at its own level and colour
+- [x] **Drift them apart deliberately, then tap up** -- the two sources re-converge
+
+That last one is the load-bearing result. **It proves the switch sends discrete `On`/`Off` rather
+than `Toggle`**, which the entire binding design rests on: under `Toggle`, two endpoints deliberately
+driven out of sync would invert independently and stay wrong forever, with no way for the switch to
+recover them. Discrete commands make the drift self-correcting, which is exactly what was observed.
+This had been confirmed once before, but never under the two-endpoint arrangement, where the failure
+mode would have been considerably more visible.
+
+- [ ] Hold: both dim. Not separately reported. This is the leg that exercises the newly added
+      `genLevelCtrl` binding -- on/off would pass identically with `genLevelCtrl` missing, which is
+      precisely the state the binding was in before this session -- so it is worth a explicit check.
 
 ---
 
