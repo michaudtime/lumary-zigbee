@@ -446,6 +446,18 @@ Step 2's OTA leg also settles a design risk carried from the two-endpoint split:
 registered on endpoint 1 while two endpoints now exist, and the Arduino library's OTA support was
 written against single-endpoint examples.
 
+> **The OTA path is now wired end to end and offering an update, verified 2026-08-18.** It had never
+> been runnable before: the firmware registered a client and queried on every join, but the converter
+> declared no `ota` property, so Z2M had nothing to answer with. Three separate things had to be true,
+> and each failed differently — no `update` entity at all (converter), `No image currently available`
+> (no index), and up-to-date-forever (Z2M caching the previous check). All three are documented in
+> README "OTA Updates".
+>
+> Current state: fixture running 1.0.0 (`0x01000000`), image built and indexed at 2.0.0
+> (`0x02000000`), `update.overhead_light_test` offering it. **Run the update at the bench, with the
+> USB port in reach, before the fixture goes in the ceiling** — the BLE fallback the README used to
+> promise was never implemented, so a failed in-ceiling OTA has no recovery short of pulling the can.
+
 Everything else in the bench checklist (`2026-08-18-bench-verification.md`) passed on 2026-08-18 —
 sections 1–9 — so this task is the only remaining gate on signing off rev A.
 

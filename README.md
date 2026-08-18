@@ -232,6 +232,18 @@ ota:
   zigbee_ota_override_index_location: ota/index.json
 ```
 
+Both paths are relative to the Z2M data directory — the index's own location, and the `url` inside
+it naming the image. Verified end to end 2026-08-18 against Z2M 2.13.0: no http(s) URL and no
+absolute path is needed for a locally served image.
+
+Z2M caches the last OTA check, so after installing an index it will keep reporting the device as up
+to date until it re-checks — on the next device announce, hourly, or immediately if you ask:
+
+```
+topic:   zigbee2mqtt/bridge/request/device/ota_update/check
+payload: {"id": "Overhead light test"}
+```
+
 For a one-off test you can skip the index entirely and name the file in the update request, which is
 useful for confirming the image itself is good before troubleshooting configuration:
 
