@@ -1,7 +1,7 @@
 # Bench verification — everything outstanding
 
 **Date:** 2026-08-18
-**Status:** in progress — §§1-6 done 2026-08-18
+**Status:** in progress — §§1-7 done 2026-08-18
 
 Three separate bodies of work are merged to `main` and unverified on hardware. This consolidates
 their outstanding checks into one session, in an order chosen so that each check does not mask the
@@ -199,7 +199,7 @@ and the exclusion is gone.
 
 ---
 
-## 7. The effects — mostly PASS, one real finding
+## 7. The effects — PASS, with one finding and one wart
 
 - [x] All six run and dim: `warm_gradient`, `color_gradient`, `breathing`, `color_cycle`,
       `chase`, `nightlight`
@@ -240,19 +240,43 @@ Two candidate responses, deliberately not actioned mid-bench:
   time-average falls between them. This is how 8-bit pixel libraries reach effective 12-bit
   behaviour. Needs a stable frame rate and its own design cycle.
 
-### Still outstanding in this section
+### The rest of the section
 
-- [ ] Setting a ring colour drops `effect` to `none`
-- [ ] **Change the downlight's colour temperature while a ring effect runs** -- the ring's effect
-      must **stay** what it was. If HA flips it to `none`, `tzColorClearsEffect` is still clearing on
-      the wrong entity. This is the last-branch regression check.
-- [ ] `warm_gradient` **at full brightness** -- its rendering changed, not just its dimming.
-      Compare against memory; it should look the same or better.
-- [ ] `fx_breathing`'s trough: watch that it fades to very dim rather than snapping to black.
-      Note this interacts directly with the finding above.
-- [ ] Select an effect from the **downlight** card (the §2 union finding). Endpoint 1 has no
-      `0xFC00` cluster, so a Z2M error and no visible change is expected. This decides whether the
-      dropdown needs suppressing there.
+- [x] Setting a ring colour drops `effect` to `none`
+- [x] **Changing the downlight's colour temperature while a ring effect runs leaves the effect
+      alone.** This was the last branch's regression check: `tzColorClearsEffect` had been keyed on
+      `color_temp` as well as `color`, so a downlight CCT change would have cleared the ring's
+      effect. Narrowing it to `key: ['color']` is confirmed correct on hardware.
+- [x] `warm_gradient` at full brightness looks good -- its rendering changed in the gamma work, not
+      only its dimming, and the change is an improvement.
+- [x] `fx_breathing` behaves correctly through its trough at usable brightness. (At low brightness
+      it is subject to the collapse finding above, like every other effect.)
+
+### WART: the downlight's effect dropdown turns the light on and does nothing else
+
+Observed: with the downlight off, selecting an effect from its card **turns the downlight on**. With
+it already on, cycling through effects changes nothing at all. The ring is unaffected throughout.
+
+Both halves follow from code:
+
+- The light coming on is Home Assistant's `light.turn_on` semantics. Selecting an effect calls
+  `light.turn_on` with an `effect` attribute, and the MQTT light platform always includes
+  `state: ON` in that payload. Endpoint 1 receives a legitimate On command and obeys it.
+- The effect going nowhere is `tzEffect`, whose `key` is `['effect']` -- so it *does* match on the
+  downlight entity, resolves the endpoint to 1, and issues `setEffect` against cluster `0xFC00`,
+  which exists only on endpoint 2. The command cannot succeed.
+
+So the §2 union finding resolves as: harmless but untidy. Nothing is corrupted and the ring is never
+disturbed; the downlight card simply carries a control that does nothing except switch the light on.
+
+Suppressing it is not available through the converter. `z2m/lumary-brain-revA.js:46` already records
+why the expose is named `effect` -- that exact name is what makes it a first-class light control on
+the ring rather than a separate `select` entity -- and Z2M's discovery union is the price. Both
+`m.light()` calls already pass `effect: false`. The real fix is making Z2M's HA discovery
+endpoint-aware, which belongs with item 10 (upstreaming the converter).
+
+Worth capturing the Z2M log line for the failed `setEffect` next time the fixture is on the bench;
+it would confirm whether the command errors or is silently absorbed.
 
 ---
 
