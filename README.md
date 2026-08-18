@@ -3,7 +3,7 @@
 Replaces the Tuya WiFi controller inside a **Lumary 6" RGBAI recessed light** with an **ESP32-H2 Zigbee controller**, enabling:
 
 - Direct Zigbee binding to Inovelli Blue Series switches (hub-independent on/off, dimming, scene control)
-- 8 built-in lighting effects with per-scene parameters stored on-device
+- 6 built-in lighting effects on the accent ring, with per-scene parameters stored on-device
 - Zigbee OTA firmware updates via Zigbee2MQTT
 - BLE OTA fallback (hold BOOT button 5s) for when the light is already in the ceiling
 
@@ -17,7 +17,8 @@ Replaces the Tuya WiFi controller inside a **Lumary 6" RGBAI recessed light** wi
 
 ### The two light sources
 
-The fixture has two independent sources, and the firmware drives them separately:
+The fixture has two independent sources, and the firmware drives them as **two separate Zigbee
+endpoints**, so Home Assistant sees two independent light entities rather than one:
 
 | Source | Hardware | Driven by |
 |---|---|---|
@@ -25,6 +26,17 @@ The fixture has two independent sources, and the firmware drives them separately
 | Inner white ring | 96 LEDs, 12 series × 4 parallel per colour, 2700 K + 6500 K | Two low-side PWM channels steering the driver's 380 mA |
 
 The external `L-SD8E1` driver supplies **36.63 V constant-current** (inner white anode) and **4.7 V** (ring + logic). The board never sources the white current — it gates and steers it.
+
+| Entity | Endpoint | Controls |
+|---|---|---|
+| `light.<name>_downlight` | 1 | on/off, brightness, colour temperature 2700–6500 K |
+| `light.<name>_ring` | 2 | on/off, brightness, xy colour, the six effects |
+
+> **Upgrading an already-paired fixture:** adding the second endpoint changes the device
+> descriptor, and Zigbee2MQTT caches endpoints from the interview. A fixture paired before this
+> firmware will show only the downlight until it is **re-interviewed** (Z2M frontend → device →
+> Re-interview, or publish to `zigbee2mqtt/bridge/request/device/interview`). Newly paired
+> fixtures just work.
 
 ### Wiring (rev A board)
 
@@ -45,16 +57,23 @@ On ESP32-H2, the RMT peripheral conflicts with the Zigbee radio. Instead, SPI2 b
 
 ## Built-in Effects
 
+These belong to the **Accent Ring** entity only — the Downlight has no effects, just on/off,
+brightness and colour temperature.
+
 | # | Name | Description |
 |---|---|---|
-| 1 | Static White | CW/WW blend via color temp, brightness dimmer-controlled |
-| 2 | Static Color | Solid RGB on outer ring |
-| 3 | Warm Gradient | Warm→cool sweep rotating around the ring |
-| 4 | Color Gradient | Multi-hue gradient rotating around ring |
-| 5 | Breathing | Outer ring pulses in/out |
-| 6 | Color Cycle | Full HSV hue rotation |
-| 7 | Chase | Single lit segment travels around ring |
-| 8 | Nightlight | Dim warm white outer ring only |
+| 1 | Warm Gradient | Warm→cool sweep rotating around the ring |
+| 2 | Color Gradient | Multi-hue gradient rotating around ring |
+| 3 | Breathing | Outer ring pulses in/out |
+| 4 | Color Cycle | Full HSV hue rotation |
+| 5 | Chase | Single lit segment travels around ring |
+| 6 | Nightlight | Dim warm white outer ring only |
+
+> **Changed in this version:** `static_white` and `static_color` are gone from the effect list.
+> White is now the separate Downlight entity, and a solid ring colour is `effect: none` with a
+> colour set. Automations naming either of the two removed effects need updating. Stored scenes
+> are reseeded automatically — the NVS schema version bump discards the old indices rather than
+> misreading them.
 
 ## Switch Control (Hub-Independent)
 
@@ -66,7 +85,21 @@ On ESP32-H2, the RMT peripheral conflicts with the Zigbee radio. Instead, SPI2 b
 | 2× tap down | Previous effect — **via hub automation** |
 
 On/off and dimming use direct Zigbee binding — **no hub required**, and they keep working if the
-coordinator is down.
+coordinator is down. With two fixture endpoints, the switch binds to both:
+
+```
+Bind from the Inovelli's endpoint 2 (the paddle) to BOTH fixture endpoints,
+clusters genOnOff and genLevelCtrl:
+
+  switch ep2 -> fixture ep1   (downlight)
+  switch ep2 -> fixture ep2   (accent ring)
+```
+
+One tap down turns both sources off; one tap up brings both back at their own levels and colours.
+This works because the Inovelli sends discrete `On`/`Off` rather than `Toggle` — verified on the
+hardware. Under `Toggle`, two endpoints that had drifted into different states would diverge
+further on every tap instead of converging. "Downlight only" is a Home Assistant action rather
+than a switch action; remove the second binding if you would rather the ring ignored the switch.
 
 > **Effect stepping is not hub-independent, and cannot be.** The Inovelli's multi-tap events are
 > manufacturer-specific and go to the coordinator rather than to a bound light, so nothing the
@@ -83,26 +116,27 @@ Install [`z2m/lumary-brain-revA.js`](z2m/lumary-brain-revA.js) into Z2M's `data/
 and restart. Without the converter the light still works normally — the effects are simply
 unreachable.
 
-The converter exposes the effects as the light's **native Home Assistant effect list**, so they
-appear in the effect dropdown of the light card itself rather than as a separate entity:
+The converter exposes the effects as the **Accent Ring entity's native Home Assistant effect
+list**, so they appear in the effect dropdown of the ring's light card itself rather than as a
+separate entity:
 
 ```yaml
 service: light.turn_on
-target: {entity_id: light.lumary_kitchen}
+target: {entity_id: light.lumary_kitchen_ring}
 data: {effect: color_cycle}
 ```
 
 That also means HA scene snapshots capture the running effect, and voice assistants can select one.
-The current effect reads back as `state_attr('light.lumary_kitchen', 'effect')`.
+The current effect reads back as `state_attr('light.lumary_kitchen_ring', 'effect')`.
 
 | Value | Meaning |
 |---|---|
-| `static_white` … `nightlight` | One of the eight built-in effects, in `EffectType` order |
-| `none` | Not running an effect — showing a plain colour or colour temperature |
+| `warm_gradient` … `nightlight` | One of the six built-in effects, in `EffectType` order |
+| `none` | Not running an effect — showing a plain colour |
 
-Setting a colour or colour temperature **exits the effect** and shows that colour instead, which
-reads back as `none`. Selecting `none` does the same thing without changing the colour. Brightness
-continues to scale whatever effect is running.
+Setting a colour on the ring **exits the effect** and shows that colour instead, which reads back
+as `none`. Selecting `none` does the same thing without changing the colour. Brightness continues
+to scale whatever effect is running.
 
 The selected effect persists across power cuts (NVS); `none` deliberately does not, so a power
 cycle comes back to the stored effect.
@@ -184,7 +218,7 @@ src/
   pixel_encode.h    — NZR-over-SPI bit encoder (hardware-free, unit-tested)
   led_driver.h/.cpp — SPI2 ring driver + LEDC CW/WW PWM
   effect_params.h   — EffectType enum, EffectParams struct
-  effects.h/.cpp    — 8 effect implementations + lookup table
+  effects.h/.cpp    — 6 effect implementations + lookup table
   scene_store.h/.cpp — NVS scene persistence
   zigbee_light.h/.cpp — Zigbee Extended Color Light clusters
   zigbee_ota.h/.cpp — Zigbee OTA Upgrade cluster
