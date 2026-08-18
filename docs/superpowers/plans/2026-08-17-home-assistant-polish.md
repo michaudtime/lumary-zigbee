@@ -141,11 +141,49 @@ So rolling this out means: **newly paired fixtures just work; already-paired one
 re-interview** (Z2M frontend, or `zigbee2mqtt/bridge/request/device/interview`). Worth remembering
 before concluding the firmware is broken on an existing fixture.
 
-## 6. Gamma and the low end
+## 6. Gamma and the low end — DONE, bench-verified 2026-08-18
 
-`scale8` feeds both the ring and the 8-bit PWM linearly, so the bottom third of HA's brightness
-slider does very little and then jumps. Wants a gamma LUT on the ring and a minimum duty floor on
-CW/WW so brightness 1 is dim rather than off.
+`scale8` fed both the ring and the 8-bit PWM linearly, so the bottom third of HA's brightness slider
+did very little and then jumped. Replaced with the CIE 1931 lightness curve on both light sources,
+and the white string's PWM widened from 8-bit to 12-bit to give the curve somewhere to land. Two
+generated 256-entry tables (`scripts/gen-gamma-tables.py` -> `src/brightness.h`), one to 255 for the
+ring and one to 4095 for the white string. See `2026-08-17-gamma-and-low-end-design.md`.
+
+**The measured minimum duty is: there isn't one.** This was the open question the whole branch rested
+on -- 12-bit at 1 kHz means a single count is a 0.24 uS pulse, and nothing short of hardware could
+say whether the L-SD8E1's constant-current loop would respond to it. It does. Brightness 1 produces
+visible light and every step above it is brighter than the last, so the provisional `max(1, ...)`
+floor in `white_mix_gamma()` stands unchanged and no measured-floor lift was needed.
+
+The curve's linear segment below L* = 8 is what makes that reachable at all; a plain power law
+cannot resolve brightness 1 to a non-zero duty.
+
+Verified across both sources: an even ramp through 1, 5, 10, 25, 50, 100, 150, 200, 255 with no jump
+out of the low end, and colour temperature holding steady while dimming 255 -> 10 at 2700 K, 4000 K
+and 6500 K. The 4000 K sweep is the one that matters -- it is the only test point where both mix
+coefficients are non-zero, so it is the hardware confirmation of the `+127` rounding added to
+`white_mix_gamma()` for levels 1-4.
+
+**Finding: brightness 255 tops out at 254, and that is correct.** ZCL `genLevelCtrl` defines
+`CurrentLevel` over `0x00`-`0xFE`, so Z2M carries `brightness_scale: 254` and the firmware never
+receives 255. Index 255 of both tables is unreachable, putting peak output about 1% below
+theoretical maximum. Not worth compensating for -- rescaling would desynchronise this fixture from
+every other light on the network to fix something invisible.
+
+**Finding, carried forward as its own work: ring effects collapse to black below roughly brightness
+20.** At brightness 16 the curve asks for 0.7% output -- 28 counts of 4095 on the downlight, but
+under 2 counts of 255 on the ring. Effects pre-scale their own pixels before the brightness
+multiplier lands, so mid-gradient pixels truncate to zero and `warm_gradient` reads as "off":
+
+```
+warm_gradient at brightness 16 (gamma8(16) = 2):
+  peak {255,169,87} -> {2,1,0}
+  mid  {127, 84,43} -> {0,0,0}
+```
+
+A resolution limit, not a logic bug, and confined to effects -- a solid ring colour still resolves to
+a non-zero count. The cheap partial is `+127` rounding in `scale_by_255()`; the real fix is temporal
+dithering. Neither was done here. Full arithmetic in `2026-08-18-bench-verification.md` section 7.
 
 ## 7. Effect parameters
 
@@ -192,8 +230,38 @@ ring, deliberately: existing switch bindings and the OTA/Basic-cluster strings a
   in a footnote.
 
 All of the above is implemented and documented (README: "The two light sources", "Switch Control"
-and "Built-in Effects"); the fixture pass — both entities appearing, both lit at once, the switch
-binding behaving as described — is still outstanding and belongs to the bench verification step.
+and "Built-in Effects"), and **bench-verified on the fixture 2026-08-18**:
+
+- Both entities appear under one device, correctly shaped -- the downlight advertises
+  `supported_color_modes: ["color_temp"]` with no colour wheel, the ring `["xy"]` with no colour
+  temperature. This settles the design's first risk: `ZigbeeColorDimmableLight` configured
+  `COLOR_TEMP`-only keeps the `HA_COLOR_DIMMABLE_LIGHT` device ID, and it was unproven whether Z2M
+  would read `colorCapabilities` and present it correctly. It does.
+- Both sources lit at once -- white downlight at 2700 K under a saturated coloured ring, and a ring
+  effect running over a lit downlight. The thing `WHITE_SAT_THRESHOLD` made structurally impossible.
+- The switch binding behaves as designed across both endpoints, including the load-bearing case:
+  drive the two sources deliberately out of sync, tap up, and they re-converge. That is the proof
+  the Inovelli sends discrete `On`/`Off` rather than `Toggle`, now confirmed under the two-endpoint
+  arrangement rather than only the single-endpoint one.
+- The effect survives a power cycle and Home Assistant displays it. Tested with `chase` rather than
+  `warm_gradient`, deliberately -- index 0 is both the reseed default and the effect attribute's
+  static-init value, so it cannot distinguish a restore from a reset. Confirmed with a forced
+  attribute read that bypasses Z2M's cache, on a cold boot with USB fully unplugged.
+
+**Wart found on the bench: the downlight's card also carries an effect dropdown.** Z2M's HA
+discovery unions every enum expose named `effect` into the light entity's `effect_list`, and that
+union is not endpoint-aware. Selecting one turns the downlight on -- HA bundles `state: ON` into
+every `light.turn_on` -- and then does nothing, because `tzEffect` resolves to endpoint 1, which
+carries no `0xFC00` cluster. Harmless, and not fixable from the converter: both `m.light()` calls
+already pass `effect: false`, and the expose is named `effect` precisely so it lands inside the
+light card instead of becoming a separate `select`. The real fix is making Z2M's discovery
+endpoint-aware, which belongs with item 10.
+
+**Rollout needs two steps, not one, and this session proved it the hard way.** The updated converter
+must be installed in `data/external_converters/` and Z2M restarted *before* the re-interview means
+anything. With the old converter still loaded, Z2M ran the one-entity definition and HA showed a
+single light with the old nine-entry effect list -- no amount of re-interviewing would have produced
+two entities.
 
 This unblocks item 10.
 

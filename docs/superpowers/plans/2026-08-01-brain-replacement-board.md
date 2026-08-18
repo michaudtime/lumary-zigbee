@@ -414,10 +414,40 @@ drives all three dice at brightness 200 — with no flicker or sag from the driv
 Still untested: **NVS scene storage**. The demo mode uses `kDefaultParams` directly and bypasses
 `scene_store` entirely, so saving and recalling scenes over Zigbee has never been exercised.
 
-### Task 6.4: In-fixture drop-in test — [USER]
+### Task 6.4: In-fixture drop-in test — [USER] — STILL OPEN, unblocked 2026-08-18
 
 - [ ] **Step 1:** Unplug the stock board, plug in the new board using the existing harnesses (no rewiring). Power the real driver. Expected: light works, both rings function.
 - [ ] **Step 2: Verify** RF range / Zigbee binding to the Inovelli switch and a Zigbee OTA test succeed from the installed location. PASS/FAIL → sign off rev A.
+
+> **This task was silently blocked until 2026-08-18, and the block was invisible from the bench.**
+> `setup()` opened with an unbounded `while (!Serial) delay(10)`. The build sets
+> `ARDUINO_USB_CDC_ON_BOOT=1`, so `Serial` is the USB CDC and never becomes true unless a host
+> enumerates it — meaning `setup()` never returned on a fixture running from mains alone. Everything
+> below that line was dead: `led_driver_init()` never configured the white PWM GPIO, so the L-SD8E1
+> saw no gating signal and drove the downlight full on, and `zigbee_light_init()` never started the
+> radio. There is no USB host in a ceiling, so the fixture could not have passed this task at all.
+>
+> Fixed in `ab5dfe9` by bounding the wait to one second, and a standalone cold boot with USB
+> unplugged is verified: downlight stays off, device joins.
+>
+> Every bench session before this one was USB-tethered, which is exactly why nobody caught it. The
+> general lesson is worth carrying into this task: **a bench rig that differs from the deployed
+> configuration in any powered respect hides precisely the faults that matter.** Sections 1–7 of the
+> bench checklist all passed while this was live.
+
+Two caveats carried from Task 6.3, both still open:
+
+- [ ] **Re-check thermals in the sealed can.** 6.3's numbers (Q2 at 37 °C, U2 at 40 °C) were open-air
+      bench at 23 °C ambient. The deltas should hold; the absolute temperatures will not.
+- [ ] **Meter the leg current in series.** Never actually measured — P0.5's `I_set` is still taken on
+      trust from the driver's CC rating.
+
+Step 2's OTA leg also settles a design risk carried from the two-endpoint split: one OTA client is
+registered on endpoint 1 while two endpoints now exist, and the Arduino library's OTA support was
+written against single-endpoint examples.
+
+Everything else in the bench checklist (`2026-08-18-bench-verification.md`) passed on 2026-08-18 —
+sections 1–9 — so this task is the only remaining gate on signing off rev A.
 
 ---
 
