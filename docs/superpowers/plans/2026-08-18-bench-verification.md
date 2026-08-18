@@ -126,17 +126,31 @@ Consequences:
 
 ---
 
-## 4. The brightness ramp
+## 4. The brightness ramp — downlight PASS, ring outstanding
 
-- [ ] Step the downlight through 1, 5, 10, 25, 50, 100, 150, 200, 255
+- [x] Step the downlight through 1, 5, 10, 25, 50, 100, 150, 200, 255
 
-Expected: a visibly even ramp, no jump out of the low end, no region where several steps look
-identical.
+Even ramp, no jump out of the low end, no region where steps look identical.
+
+**Brightness 255 tops out at 254 — this is correct, not a defect.** ZCL `genLevelCtrl` defines
+`CurrentLevel` over `0x00`-`0xFE` with `0xFF` reserved, so Z2M's HA discovery carries
+`brightness_scale: 254` and HA's 0-255 slider is scaled onto 0-254 on the wire. The firmware cannot
+receive 255. Every Zigbee light on the network behaves the same way.
+
+Two consequences, neither worth acting on:
+
+- Index 255 of `kGamma8`/`kGamma12` is unreachable, so peak output is `gamma8(254) = 252` and
+  `gamma12(254) = 4054` rather than 255 / 4095 -- about **1% below theoretical maximum**, at the
+  flattest part of the curve. Rescaling so level 254 reached full duty would make this fixture
+  inconsistent with every other light on the network to correct something invisible.
+- `scale_level()` (`src/light_state.h:64`) exists to handle level 255 without `scale8`'s
+  255 -> 254 off-by-one. That path is unreachable over Zigbee, since its only caller feeds it a
+  Zigbee-sourced level. Correct and harmless, just never exercised.
 
 - [ ] Sweep the **ring** through the same values
 
-Expected: also even — and **dramatically dimmer across the whole lower half than you remember.**
-`gamma8(64) == 11`, so mid-slider is roughly 6× lower than the old linear behaviour. That is correct.
+Expected: also even -- and **dramatically dimmer across the whole lower half than you remember.**
+`gamma8(64) == 11`, so mid-slider is roughly 6x lower than the old linear behaviour. That is correct.
 Judge it against the downlight, not against memory.
 
 ---
