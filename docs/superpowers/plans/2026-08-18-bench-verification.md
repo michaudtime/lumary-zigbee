@@ -1,7 +1,7 @@
 # Bench verification — everything outstanding
 
 **Date:** 2026-08-18
-**Status:** not started
+**Status:** in progress — §1 and §2 done 2026-08-18
 
 Three separate bodies of work are merged to `main` and unverified on hardware. This consolidates
 their outstanding checks into one session, in an order chosen so that each check does not mask the
@@ -43,41 +43,63 @@ Expected: `boot ok` then `LED driver init ok` on the monitor.
 
 ---
 
-## 1. The downlight's on/off — do this FIRST
+## 1. The downlight's on/off — PASS
 
 **Order matters here more than anywhere else in this document.** The last branch fixed a bug where
 the downlight's on/off and level were dropped until a colour-temperature command arrived. Touching
 the CCT slider first flips the colour mode and masks the bug for the rest of the session.
 
-- [ ] Power cycle the fixture
-- [ ] **Without touching colour temperature**, send `light.turn_on` to `light.*_downlight` from HA
-- [ ] Tap up on the Inovelli
+- [x] Power cycle the fixture
+- [x] **Without touching colour temperature**, send `light.turn_on` to `light.*_downlight` from HA
+- [x] Tap up on the Inovelli
 
-Expected: both work immediately.
-
-If both do nothing, and the light then snaps on the moment you move the warmth slider — the fix did
-not take. Record it and stop; that is a firmware bug, not a hardware one.
+Both worked immediately. The mode-agnostic callback shims added in the item 9 review are confirmed
+on hardware: `ZigbeeColorDimmableLight` leaves `_current_color_mode` at `CURRENT_X_Y`, and
+registering an RGB-shaped callback alongside the CCT one is what keeps endpoint 1 — the endpoint the
+wall switch binds to — responsive before any colour command arrives.
 
 ---
 
-## 2. Both entities exist and are shaped right
+## 2. Both entities exist and are shaped right — PASS, with one finding
 
-- [ ] `light.*_downlight` and `light.*_ring` both appear under one device
-- [ ] The **downlight** shows a colour-temperature control and **no colour wheel**
-- [ ] The **ring** shows a colour wheel and **no colour-temperature slider**
+Verified 2026-08-18 against the HA entity registry and state machine, after installing the updated
+converter and restarting Z2M.
 
-Design risk 1 is exactly this: `ZigbeeColorDimmableLight` configured `COLOR_TEMP`-only keeps the
-`HA_COLOR_DIMMABLE_LIGHT` device ID, so whether Z2M reads `colorCapabilities` and presents it
-correctly is unproven.
+- [x] Both entities appear under **one** device
+      (`light.overhead_light_test_downlight`, `light.overhead_light_test_ring`, and
+      `button.overhead_light_test_identify`, all on `device_id 1aca1363db02d25c5b57b49d3a95e104`)
+- [x] The **downlight** shows a colour-temperature control and **no colour wheel** —
+      `supported_color_modes: ["color_temp"]`, 2702–6493 K
+- [x] The **ring** shows a colour wheel and **no colour-temperature slider** —
+      `supported_color_modes: ["xy"]`
+
+**Design risk 1 is settled.** `ZigbeeColorDimmableLight` configured `COLOR_TEMP`-only does present
+correctly through Z2M; keeping the `HA_COLOR_DIMMABLE_LIGHT` device ID did not leak an X/Y control
+onto the downlight. The old combined `light.0x744dbdfffe6b575f` was replaced outright rather than
+left behind as an unavailable entity.
 
 - [ ] Check the reported `colorMode` attribute on endpoint 1. The library's default cluster config
       leaves it at `0x01` (CurrentX/Y) on an endpoint that advertises no X/Y capability — Z2M may
       show a colour picker anyway, or log a capability warning. Record what it does.
+      **Still open:** read it from the Z2M frontend's Dev console tab (endpoint 1, cluster
+      `lightingColorCtrl`, attribute `colorMode`). The HA side already looks right, so this is now
+      a curiosity rather than a risk.
 
-- [ ] **Does the downlight card also show an effect dropdown?** Z2M's HA discovery unions enum
-      exposes named `effect` into light entities; whether that match is endpoint-aware is an open
-      question. If it appears there, selecting one sends `setEffect` to endpoint 1, which has no
-      `0xFC00` cluster — expect a Z2M error and nothing visible.
+- [x] **Does the downlight card also show an effect dropdown?** **Yes.** Both entities carry the
+      identical seven-entry `effect_list`:
+      `[none, warm_gradient, color_gradient, breathing, color_cycle, chase, nightlight]`.
+      Z2M's Home Assistant discovery union is **not** endpoint-aware. This is a known cost rather
+      than a surprise — `z2m/lumary-brain-revA.js:46` documents the union as the reason the expose
+      is named `effect` at all, since that name is what puts the dropdown inside the light card
+      instead of creating a separate `select` entity. What selecting an effect from the
+      **downlight** card actually does is still unknown; §7 settles it.
+
+Both entities read `state: unknown` immediately after the restart — no state message received yet.
+Expect that to clear on the first command or power cycle. If it persists, it belongs in §10.
+
+The entity IDs changed with the split. A config-body search across automations, scripts, scenes
+and helpers found no references to the old `light.0x744dbdfffe6b575f`, so nothing needs repointing
+for this fixture — but the other Lumary fixtures will when they are flashed.
 
 ---
 
