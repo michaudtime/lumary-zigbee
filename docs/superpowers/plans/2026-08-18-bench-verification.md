@@ -309,6 +309,10 @@ returned and everything below that line was dead code:
 Fixed by bounding the wait to one second, which still catches `boot ok` on the monitor at the bench
 without stranding a mains-only boot.
 
+**Verified on hardware the same session:** with USB fully unplugged from the PC, the fixture cold-
+boots from mains alone, the downlight stays off as it should, and the device joins the network. This
+is the first time the board has ever completed a standalone power-up.
+
 **This blocked section 11 outright** -- there is no USB host in a ceiling, so the fixture could never
 have worked installed. It is the single most valuable thing this bench session found, and it was
 only reachable by testing the real power-up path rather than a tethered one.
