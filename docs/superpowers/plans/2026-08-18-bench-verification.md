@@ -1,7 +1,7 @@
 # Bench verification — everything outstanding
 
 **Date:** 2026-08-18
-**Status:** in progress — §§1-3 done 2026-08-18
+**Status:** in progress — §§1-4 done 2026-08-18
 
 Three separate bodies of work are merged to `main` and unverified on hardware. This consolidates
 their outstanding checks into one session, in an order chosen so that each check does not mask the
@@ -126,7 +126,7 @@ Consequences:
 
 ---
 
-## 4. The brightness ramp — downlight PASS, ring outstanding
+## 4. The brightness ramp — PASS
 
 - [x] Step the downlight through 1, 5, 10, 25, 50, 100, 150, 200, 255
 
@@ -147,11 +147,15 @@ Two consequences, neither worth acting on:
   255 -> 254 off-by-one. That path is unreachable over Zigbee, since its only caller feeds it a
   Zigbee-sourced level. Correct and harmless, just never exercised.
 
-- [ ] Sweep the **ring** through the same values
+- [x] Sweep the **ring** through the same values
 
-Expected: also even -- and **dramatically dimmer across the whole lower half than you remember.**
-`gamma8(64) == 11`, so mid-slider is roughly 6x lower than the old linear behaviour. That is correct.
-Judge it against the downlight, not against memory.
+Also even. The ring dims correctly across its full range under the CIE curve, judged against the
+downlight rather than against memory -- `gamma8(64) == 11` puts mid-slider roughly 6x below the old
+linear behaviour, and that reads as intended rather than as a fault.
+
+Item 6's core claim is now confirmed on hardware for both light sources: one perceptual curve, two
+very different drive paths (12-bit LEDC into a constant-current driver, and 8-bit NZR into the
+pixel ring), and the ramps match each other.
 
 ---
 
