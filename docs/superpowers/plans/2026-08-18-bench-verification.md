@@ -1,7 +1,7 @@
 # Bench verification — everything outstanding
 
 **Date:** 2026-08-18
-**Status:** in progress — §§1-4 done 2026-08-18
+**Status:** in progress — §§1-5 done 2026-08-18
 
 Three separate bodies of work are merged to `main` and unverified on hardware. This consolidates
 their outstanding checks into one session, in an order chosen so that each check does not mask the
@@ -159,16 +159,26 @@ pixel ring), and the ramps match each other.
 
 ---
 
-## 5. Colour temperature holds while dimming
+## 5. Colour temperature holds while dimming — PASS
 
-- [ ] Set 2700 K, sweep brightness 255 → **10**
-- [ ] Repeat at 4000 K and at 6500 K
+- [x] Set 2700 K (370 mired), sweep brightness 255 -> **10**
+- [x] Repeat at 4000 K (250 mired) and at 6500 K (154 mired)
 
-Expected: dimmer without getting warmer or cooler.
+All three dim without drifting warmer or cooler.
 
-> **Sweep to 10, not 20.** The original plan stopped at 20, which sits above the region where a
-> truncation bug used to bite — it would have reported a clean pass over a real defect. Rounding was
-> added to `white_mix_gamma()` specifically for levels 1–4.
+The three points are deliberately different tests, and all three passing is what makes this
+meaningful:
+
+- **370 and 154 mired** are `CCT_MIRED_WARM` / `CCT_MIRED_COOL` (`src/light_state.h:17-18`), the
+  rated temperatures of the two strings. They drive `cct` to 0 and 255, so one string carries the
+  whole output and `white_mix_gamma()` reduces to a single `gamma12()` lookup.
+- **250 mired** gives `cct` 141 -- a genuine split, where both coefficients are non-zero and the
+  rounding matters.
+
+That middle case sweeping to 10 without a colour shift is the hardware confirmation of the `+127`
+rounding added to `white_mix_gamma()`. The bug it replaced collapsed a 50/50 request to fully warm
+at level 1, and the original plan's stop-at-20 would have passed straight over it. Rounding also
+makes `ww + cw == total` exactly, so no output is lost to truncation at any level.
 
 ---
 
