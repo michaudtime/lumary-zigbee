@@ -192,18 +192,6 @@ export default {
         // `identify`, so unlike the stock Identify trigger-effects it cannot be
         // folded into the light's effect_list.
         m.identify(),
-        // Zigbee OTA. The firmware registers exactly one OTA client, on
-        // endpoint 1 (`addOTAClient` in src/zigbee_light.cpp) -- the spec allows
-        // one per device, not one per endpoint -- and queries for an image on
-        // first join. Without this extend the device asks and Z2M has nothing to
-        // answer with: no `update` entity, no image served.
-        //
-        // Z2M finds the image by manufacturer code + image type, both of which
-        // come from src/config.h, and only offers versions above the running
-        // ZB_FW_VERSION. Building and placing the image is in README "OTA
-        // Updates"; --file-version there must equal ZB_FW_VERSION or the
-        // coordinator will never offer it.
-        m.ota(),
         m.deviceAddCustomCluster('lumary', {
             ID: 0xfc00,
             attributes: {
@@ -221,6 +209,22 @@ export default {
     fromZigbee: [fzEffect],
     toZigbee: [tzEffect, tzColorClearsEffect],
     onEvent,
+    // Zigbee OTA. This is a definition PROPERTY, not a modern extend -- there is
+    // no `m.ota()` in zigbee-herdsman-converters, and calling one makes Z2M
+    // reject the whole file as invalid. `ota` is declared on the definition
+    // (see Definition.ota in zigbee-herdsman-converters/lib/types) and is
+    // additionally accepted as an option by light() and onOff().
+    //
+    // Device-scoped rather than endpoint-scoped, which matches the firmware:
+    // one OTA client, registered on endpoint 1 by `addOTAClient` in
+    // src/zigbee_light.cpp, because the spec allows one per device. Without
+    // this the device queries for an image on every join and Z2M has nothing to
+    // answer with -- no `update` entity, no image served, and the firmware side
+    // looking perfectly healthy throughout.
+    //
+    // Z2M matches images on manufacturer code + image type (both from
+    // src/config.h) and only offers versions above the running ZB_FW_VERSION.
+    ota: true,
     exposes: [
         e
             .enum('effect', ea.ALL, Object.keys(EFFECTS))

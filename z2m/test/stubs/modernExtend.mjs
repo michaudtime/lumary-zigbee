@@ -16,8 +16,3 @@ export const identify = (args) => {
     calls.push({fn: 'identify', args});
     return {isModernExtend: true, kind: 'identify', args};
 };
-
-export const ota = (args) => {
-    calls.push({fn: 'ota', args});
-    return {isModernExtend: true, kind: 'ota', args};
-};

@@ -115,12 +115,29 @@ await test('the converter asks for identify', () => {
 // ── OTA ───────────────────────────────────────────────────────────────────────
 // The firmware registers an OTA client on endpoint 1 and queries for an image
 // on first join (`addOTAClient` / `requestOTAUpdate` in src/zigbee_light.cpp).
-// Without m.ota() here the device asks and Z2M has nothing to answer with, so
-// the whole OTA path is dead from the coordinator side while looking healthy
-// from the firmware side -- exactly the state this repo was in until 2026-08-18.
+// Without `ota` declared here the device asks and Z2M has nothing to answer
+// with, so the whole OTA path is dead from the coordinator side while looking
+// healthy from the firmware side -- the state this repo was in until 2026-08-18.
+//
+// LIMIT OF THIS TEST: the suite runs against local stubs, so it can confirm the
+// definition's SHAPE but never that zigbee-herdsman-converters actually accepts
+// it. Adding a stub for an API and then asserting the stub was called proves
+// only that the stub exists -- which is how `m.ota()` shipped and was rejected
+// by Z2M at load time. Anything touching the ZHC surface needs a real Z2M load.
 
-await test('the converter asks for OTA', () => {
-    assert.ok(calls.find((c) => c.fn === 'ota'), 'm.ota() was never called');
+await test('the converter declares OTA support', () => {
+    assert.equal(def.ota, true, 'definition is missing `ota: true`');
+});
+
+await test('OTA is a definition property, not an extend', () => {
+    // Regression guard for a real failure: `m.ota()` was written here first and
+    // Z2M marked the whole converter invalid, because zigbee-herdsman-converters
+    // has no such export -- `ota` is declared on the definition, and accepted as
+    // an option by light() and onOff(), but never as a standalone extend.
+    assert.ok(
+        !(def.extend ?? []).some((entry) => entry?.kind === 'ota'),
+        'OTA must not be registered as a modern extend',
+    );
 });
 
 await test('identify does not contribute a second `effect` expose', () => {
