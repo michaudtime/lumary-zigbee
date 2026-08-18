@@ -1,6 +1,7 @@
 // lumary-zigbee/src/config.h
 #pragma once
 #include "driver/ledc.h"
+#include "ring_geometry.h"
 #include "version.h"
 
 // Target board: lumary-brain rev A (drop-in replacement for the stock
@@ -17,8 +18,9 @@
 #define PIN_BLE_OTA_BUTTON     9   // BOOT button — hold 5s to enter BLE OTA
 
 // ── Outer ring (addressable) ──────────────────────────
-// UT-08-ZC03-01-5V3535RGBIC: 62 pixels, 3 colour bytes each (no white die).
-#define RING_NUM_LEDS         62
+// RING_NUM_LEDS lives in ring_geometry.h, included at the top of this file --
+// it is ESP-IDF-free so the recipe renderer and its host tests can reach it
+// without dragging driver/ledc.h in behind it.
 #define RING_SPI_CLK_HZ       3200000  // 3.2 MHz → 4 SPI bits = one 800kHz NZR bit
 // Data: 62 LEDs × 24 bits × 4 SPI bits/bit = 5952 bits = 744 bytes.
 // One SPI byte is 2.5 µs at this clock.
