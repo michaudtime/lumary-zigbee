@@ -166,7 +166,7 @@ outside that table and is untouched.
 | Effect | Change |
 |---|---|
 | `fx_static_color`, `fx_color_gradient`, `fx_breathing`, `fx_color_cycle`, `fx_chase` | rename `scale_brightness` → `scale_brightness_gamma`, one line each |
-| `fx_nightlight` | `warm_white(p.brightness)` → `warm_white(gamma8(p.brightness))` |
+| `fx_nightlight` | `warm_white(p.brightness)` → `warm_white_gamma(p.brightness)` (see the §3.1 correction — `warm_white(gamma8(…))`, which this section originally specified, carries the same `>>8` bug) |
 | `fx_static_white` | the 12-bit split, below |
 | `fx_warm_gradient` | rework, below |
 | `fx_identify` | untouched — a fixed full-output blink with no brightness input |
