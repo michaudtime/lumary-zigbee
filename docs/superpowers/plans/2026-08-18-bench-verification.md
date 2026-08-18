@@ -1,7 +1,7 @@
 # Bench verification — everything outstanding
 
 **Date:** 2026-08-18
-**Status:** in progress — §§1-8 done 2026-08-18
+**Status:** in progress — §§1-9 done 2026-08-18; §10 partial, §11 outstanding
 
 Three separate bodies of work are merged to `main` and unverified on hardware. This consolidates
 their outstanding checks into one session, in an order chosen so that each check does not mask the
@@ -390,9 +390,10 @@ recover them. Discrete commands make the drift self-correcting, which is exactly
 This had been confirmed once before, but never under the two-endpoint arrangement, where the failure
 mode would have been considerably more visible.
 
-- [ ] Hold: both dim. Not separately reported. This is the leg that exercises the newly added
-      `genLevelCtrl` binding -- on/off would pass identically with `genLevelCtrl` missing, which is
-      precisely the state the binding was in before this session -- so it is worth a explicit check.
+- [x] Hold: both dim. This is the leg that exercises the newly added `genLevelCtrl` binding --
+      on/off passes identically whether or not `genLevelCtrl` is bound, which is precisely the state
+      the binding was in before this session, so it is the only check that proves the added cluster
+      binding is live.
 
 ---
 
