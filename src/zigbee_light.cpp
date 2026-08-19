@@ -283,6 +283,11 @@ void zigbee_light_init() {
     s_down.onLightChangeHsv(on_downlight_change_hsv);
     s_down.onIdentify(on_identify);
     s_down.setManufacturerAndModel("Lumary", "LumaryBrainRevA");
+    // Mains-powered ceiling fixture, not battery -- left at the default
+    // (setPowerSource never called) the Basic cluster's power source attribute
+    // stays 0x00 Unknown, which is what Z2M's device page was showing next to
+    // the (correct) Router type.
+    s_down.setPowerSource(ZB_POWER_SOURCE_MAINS);
     s_down.setLightColorCapabilities(ZIGBEE_COLOR_CAPABILITY_COLOR_TEMP);
     if (!s_down.setLightColorTemperatureRange(CCT_MIRED_COOL, CCT_MIRED_WARM)) {
         log_e("Failed to publish colour temperature range");
@@ -303,6 +308,7 @@ void zigbee_light_init() {
     s_ring.onLightChangeHsv(on_ring_change_hsv);
     s_ring.onCustomClusterCommand(on_custom_command);
     s_ring.setManufacturerAndModel("Lumary", "LumaryBrainRevA");
+    s_ring.setPowerSource(ZB_POWER_SOURCE_MAINS);
     s_ring.setLightColorCapabilities(ZIGBEE_COLOR_CAPABILITY_HUE_SATURATION
                                    | ZIGBEE_COLOR_CAPABILITY_X_Y);
 
