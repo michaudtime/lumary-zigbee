@@ -151,10 +151,27 @@ cycle comes back to the stored effect.
 > read the current effect and set the next one. The Inovelli's multi-tap events go to the
 > coordinator rather than to a bound light, so a hub is in the loop regardless.
 
-Scene *storage* exists — 16 NVS slots, seeded with the defaults in `src/effect_params.h` — but
-editing them is **not implemented**. There is no Add Scene support; `scene_store_save()` is only
-called to seed defaults at first boot. Changing an effect's colour, speed or brightness
-permanently is a future change.
+### Custom effects
+
+The six built-ins are now points in a larger space rather than six hand-written functions. An
+effect is described by a 27-byte **recipe** — palette, spatial mapping, motion, envelope — that a
+single renderer interprets, so new effects need no new firmware. See `src/effect_recipe.h`.
+
+**The designer** (`tools/designer/`) is a browser tool for building them:
+
+```
+python scripts/serve-designer.py
+```
+
+It simulates the ring using a JavaScript port of the firmware's own renderer, pinned to it by
+golden vectors so the preview cannot drift from what the fixture does. Seventeen presets to start
+from, and a readout that tells you honestly when an effect is losing pixels off the bottom of the
+8-bit range.
+
+> **Not finished:** pushing a designed effect to the light, listing what is already in its ten
+> slots, and deleting one are not built yet. The designer saves to a local library and exports
+> JSON today. Scene *storage* exists — 16 NVS slots, ten of them free — and `scene_store_save()`
+> still has no caller outside first-boot seeding.
 
 ## OTA Updates
 
