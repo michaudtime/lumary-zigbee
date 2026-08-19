@@ -466,12 +466,28 @@ written against single-endpoint examples.
 > Still do the in-ceiling OTA knowing there is no recovery path: the BLE fallback the README used to
 > promise was never implemented, so a failed in-ceiling update means pulling the can.
 >
-> **Open, minor:** the device registry still reported `sw_version: 1.0.0` after the update, while
-> `installed_version` correctly read 2.0.0. The two come from different places -- `installed_version`
-> from the OTA cluster's FileVersion, `sw_version` from the Basic cluster's SWBuildID, which Z2M
-> reads only at interview (the item 5 finding). The post-OTA re-interview should refresh it. Confirm
-> with a manual re-interview; if it stays stale, the version string is not reaching the Basic cluster
-> after an OTA-installed image boots.
+> **Resolved, and it is a Home Assistant display issue only.** After the update HA's device registry
+> kept reporting `sw_version: 1.0.0`, and a manual re-interview did not clear it -- which raised the
+> real possibility that the image had transferred without being booted. Zigbee2MQTT's own interview
+> data says otherwise:
+>
+> ```
+> ieee: 0x744dbdfffe6b575f   swBuildId: 2.0.0   dateCode: 20260818
+> ```
+>
+> The device is running 2.0.0. Z2M holds the correct values; only HA's device registry is stale,
+> because it did not apply the republished discovery config. An MQTT integration reload or a Z2M
+> restart clears it.
+>
+> **The date code is what settled this**, and it is worth keeping the habit: the previous image
+> carried `20260817` and this one `20260818`, so the two builds are distinguishable from the air
+> even though they are otherwise functionally identical -- the OTA changed only the version block.
+> Without a moving date code there would have been no way to tell a booted new image from an unbooted
+> one. `src/version.h` bumps both together, as one unit, which is exactly why that worked.
+>
+> Note also that `installed_version` in HA is not independent evidence: it reflects what Z2M recorded
+> installing, taken from the image metadata, not a fresh read from the device. `swBuildId` and
+> `dateCode` in the herdsman database are the real reads.
 >
 > **Also observed:** a `select.overhead_light_test_effect_ring` entity appeared alongside the
 > effect's presence in both lights' `effect_list`. Z2M creates a `select` for the enum expose *and*
