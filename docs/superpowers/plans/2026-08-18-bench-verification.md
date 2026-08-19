@@ -271,10 +271,13 @@ disturbed; the downlight card simply carries a control that does nothing except 
 
 Turned out to be suppressible after all, just not from the exposes/extend shape that seemed like the
 only lever at the time: `meta.overrideHaDiscoveryPayload` runs once per light's discovery payload
-*after* Z2M has already unioned `effect`/`effect_list` onto it, keyed on `object_id`
-(`light_downlight` vs `light_ring`), so the converter can strip both fields for the downlight without
-touching the ring's. `z2m/lumary-brain-revA.js:46` still records why the expose has to be named
-`effect` in the first place. See `2026-08-17-home-assistant-polish.md` item 9 for the full writeup.
+*after* Z2M has already unioned `effect`/`effect_list` onto it, keyed on `payload.object_id` (a
+device-friendly-name-derived string, e.g. `overhead_light_test_downlight` -- not the fixed
+`light_downlight` config id, which was this fix's first, wrong guess and shipped as a silent no-op
+until checked live). `z2m/lumary-brain-revA.js:46` still records why the expose has to be named
+`effect` in the first place. See `2026-08-17-home-assistant-polish.md` item 9 for the full writeup,
+including the retained-MQTT-discovery gotcha that made the first redeploy look like it hadn't taken
+even once the match itself was fixed.
 
 Worth capturing the Z2M log line for the failed `setEffect` next time the fixture is on the bench;
 it would confirm whether the command errors or is silently absorbed.

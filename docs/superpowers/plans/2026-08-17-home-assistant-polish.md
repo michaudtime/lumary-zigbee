@@ -257,10 +257,37 @@ nothing, because `tzEffect` resolves to endpoint 1, which carries no `0xFC00` cl
 
 Turned out to be fixable from the converter after all, just not from the exposes/extend shape:
 `meta.overrideHaDiscoveryPayload` is a hook Z2M calls once per light's discovery payload, after it
-has already built `effect`/`effect_list` onto it, keyed on `object_id` (`light_downlight` /
-`light_ring`). The converter now strips both fields when `object_id === 'light_downlight'`. Verified
-against Z2M 2.13.0's `homeassistant.ts` and covered by two checks in `converter.test.mjs`. No firmware
-change, no re-interview needed -- restart Z2M with the updated converter installed.
+has already built `effect`/`effect_list` onto it. The converter strips both fields when
+`payload.object_id?.endsWith('_downlight')`.
+
+**First attempt shipped as a silent no-op.** The first cut matched on `object_id === 'light_downlight'`
+-- that string is `config.object_id`, the internal discovery-entry id used for topic construction, not
+what actually lands in the payload. A few lines before the override call, Z2M rewrites
+`payload.object_id` to `<device friendly name>_<suffix>` (`homeassistant.ts`:
+`payload.object_id = devicePayload.name...`), so on the real fixture ("Overhead light test") it read
+`overhead_light_test_downlight` -- never equal to the literal string, so the delete never fired and
+`effect_list` stayed put. The stub test suite couldn't catch this because it constructed the synthetic
+payload with the wrong key to begin with. Only checking against the live device -- with Home Assistant
+MCP access wired up for this project on 2026-08-19 -- surfaced it: the entity still carried
+`effect_list` after redeploying, well after retained-discovery staleness (the next paragraph) had
+been ruled out as the cause. Fixed by matching the suffix instead, which is stable regardless of the
+device's friendly name. Verified against Z2M 2.13.0's `homeassistant.ts` and covered by two checks in
+`converter.test.mjs`; confirmed live afterward -- `light.overhead_light_test_downlight` now reports no
+`effect`/`effect_list` at all (`supported_features` 44 -> 40), while the ring keeps its full six-effect
+list untouched. No firmware change needed.
+
+**Getting a definition change to actually take effect also needed more than a restart.** Z2M's HA
+discovery extension only republishes a topic when its freshly-computed payload differs from what it
+already has cached (`homeassistant.ts`: `discoveredMessage.payload !== payloadStr`) -- and at startup
+it seeds that cache by listening for 5 seconds to whatever is still *retained on the MQTT broker* from
+the last publish, treating anything it hears there as already-current. A converter change alone,
+followed by a restart, replays the stale retained config right back into that cache before the fresh
+one ever gets compared, so nothing republishes. The fix: clear the retained topic first
+(`mosquitto`/`mqtt.publish` an empty retained payload to
+`homeassistant/light/<ieee>/light_downlight/config`), *then* restart -- with nothing retained to
+replay, the freshly-computed payload has nothing stale to lose to. A full device re-interview alone
+was tried first and does **not** trigger this on its own; only the restart's 5-second discovery window
+does.
 
 ## Finding, fixed 2026-08-19: the ring's first white command after any boot could be silently dropped
 
