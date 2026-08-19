@@ -289,6 +289,22 @@ replay, the freshly-computed payload has nothing stale to lose to. A full device
 was tried first and does **not** trigger this on its own; only the restart's 5-second discovery window
 does.
 
+**The ring's own effect control was re-checked afterward, live, and works end to end.**
+`light.turn_on(effect: chase)` on `light.overhead_light_test_ring` reads back `state: on`,
+`effect: chase`, `effect_list` still all six entries, `color_mode: xy` -- the fix only touches the
+downlight's payload, and the ring's card is unaffected. (`ha_call_service`'s immediate return value
+showed a stale `effect: none` echo from before the command was confirmed; the true state came from a
+follow-up `ha_get_state` read a moment later -- worth remembering that the optimistic echo isn't the
+verified state.)
+
+Also worth recording since it looked like a loose end at first: **`select.overhead_light_test_effect_ring`
+is not stale or orphaned.** It's `disabled_by: "integration"`, `enabled: false` -- the disabled-by-default
+`select` entity item 1 already documented (`unique_id: 0x744dbdfffe6b575f_effect_ring_zigbee2mqtt`,
+correctly scoped to the ring). Z2M creates one of these for every enum expose alongside folding it into
+the light's own `effect_list`, and disables it by default because it's redundant with the light card's
+native dropdown. It 404s on a plain state read only because disabled entities carry no live state in
+HA -- normal, not breakage.
+
 ## Finding, fixed 2026-08-19: the ring's first white command after any boot could be silently dropped
 
 `on_ring_change_rgb`/`on_ring_change_hsv` in `zigbee_light.cpp` compare an incoming colour against
