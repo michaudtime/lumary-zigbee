@@ -453,10 +453,30 @@ written against single-endpoint examples.
 > (no index), and up-to-date-forever (Z2M caching the previous check). All three are documented in
 > README "OTA Updates".
 >
-> Current state: fixture running 1.0.0 (`0x01000000`), image built and indexed at 2.0.0
-> (`0x02000000`), `update.overhead_light_test` offering it. **Run the update at the bench, with the
-> USB port in reach, before the fixture goes in the ceiling** — the BLE fallback the README used to
-> promise was never implemented, so a failed in-ceiling OTA has no recovery short of pulling the can.
+> **A full Zigbee OTA completed successfully at the bench, 2026-08-18.** 1.0.0 -> 2.0.0, 839,694
+> bytes, `installed_version` now `33554432`, and both light entities came back correctly shaped
+> after the forced post-update re-interview. This is the first OTA this project has ever performed.
+>
+> **Design risk 2 is settled for the transfer itself**: one OTA client registered on endpoint 1
+> while two endpoints exist works, and the Arduino library's single-endpoint-example OTA support
+> handles the two-endpoint arrangement. What remains for step 2 is the same transfer *from the
+> installed location*, which is an RF question rather than a protocol one — watch for progress
+> stalling at a fixed percentage rather than failing outright.
+>
+> Still do the in-ceiling OTA knowing there is no recovery path: the BLE fallback the README used to
+> promise was never implemented, so a failed in-ceiling update means pulling the can.
+>
+> **Open, minor:** the device registry still reported `sw_version: 1.0.0` after the update, while
+> `installed_version` correctly read 2.0.0. The two come from different places -- `installed_version`
+> from the OTA cluster's FileVersion, `sw_version` from the Basic cluster's SWBuildID, which Z2M
+> reads only at interview (the item 5 finding). The post-OTA re-interview should refresh it. Confirm
+> with a manual re-interview; if it stays stale, the version string is not reaching the Basic cluster
+> after an OTA-installed image boots.
+>
+> **Also observed:** a `select.overhead_light_test_effect_ring` entity appeared alongside the
+> effect's presence in both lights' `effect_list`. Z2M creates a `select` for the enum expose *and*
+> unions it into the light entities. Harmless duplication, and it means the effect is reachable three
+> ways. Worth folding into the item 9 effect-dropdown wart rather than treating separately.
 
 Everything else in the bench checklist (`2026-08-18-bench-verification.md`) passed on 2026-08-18 —
 sections 1–9 — so this task is the only remaining gate on signing off rev A.
