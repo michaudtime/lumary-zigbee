@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include "esp_task_wdt.h"
 #include "config.h"
 #include "led_driver.h"
 #include "effects.h"
@@ -50,6 +51,23 @@ void setup() {
     for (uint32_t t0 = millis(); !Serial && millis() - t0 < 1000; ) delay(10);
     Serial.println("boot ok");
 
+    // Arm the app watchdog before anything that could hang. This is not
+    // theoretical: Zigbee.begin() has hung outright before during bring-up
+    // (bisected 2026-08-15, see zigbee_light.cpp) rather than returning an
+    // error, and the only recovery for a fixture already in the ceiling is
+    // physical USB access -- there is no OTA/BLE fallback (see README). A
+    // reboot beats a permanent hang. esp_task_wdt_init() fails with
+    // ESP_ERR_INVALID_STATE if the Arduino core already started a default
+    // TWDT, in which case reconfigure it to this timeout instead.
+    esp_task_wdt_config_t wdt_config = {};
+    wdt_config.timeout_ms    = WDT_TIMEOUT_MS;
+    wdt_config.idle_core_mask = 0;
+    wdt_config.trigger_panic = true;
+    if (esp_task_wdt_init(&wdt_config) == ESP_ERR_INVALID_STATE) {
+        esp_task_wdt_reconfigure(&wdt_config);
+    }
+    esp_task_wdt_add(nullptr);   // watch this task -- setup() and loop() both run on it
+
     scene_store_init();
     led_driver_init();
     Serial.println("LED driver init ok");
@@ -64,6 +82,8 @@ void loop() {
     static uint32_t effect_start = 0;
     static uint8_t  shown_scene  = 0xFF;   // forces a scene load on first frame
     static EffectParams scene;
+
+    esp_task_wdt_reset();
 
 #if !BENCH_DEMO_MODE
     zigbee_light_loop();
