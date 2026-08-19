@@ -46,17 +46,25 @@ void scene_store_set_active(uint8_t index) {
 bool scene_store_load(uint8_t index, EffectParams* out) {
     if (index >= NVS_MAX_SCENES) { *out = kDefaultParams[0]; return false; }
     char key[16];
-    uint8_t type, hue, sat, bri, spd;
+    // Zero-initialized rather than left indeterminate: scene_store_save() writes
+    // its five keys one at a time, so a power loss mid-save can leave some of
+    // them present and others missing. Every read below is checked (not just
+    // "type"): a scene half-written that way is corrupt regardless of which
+    // field is missing, and reading a missing key into an uninitialized local
+    // would otherwise hand back garbage instead of falling through to a default.
+    uint8_t type = 0, hue = 0, sat = 0, bri = 0, spd = 0;
+    bool ok = true;
 
-    scene_key(index, "type", key);
-    if (nvs_get_u8(s_nvs, key, &type) != ESP_OK) {
+    scene_key(index, "type", key); ok &= nvs_get_u8(s_nvs, key, &type) == ESP_OK;
+    scene_key(index, "hue",  key); ok &= nvs_get_u8(s_nvs, key, &hue)  == ESP_OK;
+    scene_key(index, "sat",  key); ok &= nvs_get_u8(s_nvs, key, &sat)  == ESP_OK;
+    scene_key(index, "bri",  key); ok &= nvs_get_u8(s_nvs, key, &bri)  == ESP_OK;
+    scene_key(index, "spd",  key); ok &= nvs_get_u8(s_nvs, key, &spd)  == ESP_OK;
+
+    if (!ok) {
         *out = (index < EFFECT_COUNT) ? kDefaultParams[index] : kDefaultParams[0];
         return false;
     }
-    scene_key(index, "hue",  key); nvs_get_u8(s_nvs, key, &hue);
-    scene_key(index, "sat",  key); nvs_get_u8(s_nvs, key, &sat);
-    scene_key(index, "bri",  key); nvs_get_u8(s_nvs, key, &bri);
-    scene_key(index, "spd",  key); nvs_get_u8(s_nvs, key, &spd);
 
     out->type       = (EffectType)type;
     out->hue        = hue;
