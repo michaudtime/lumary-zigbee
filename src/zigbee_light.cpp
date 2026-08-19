@@ -155,6 +155,15 @@ static LumaryRing      s_ring(RING_ENDPOINT);
 // so the only way to tell a colour command from a plain dim is to compare
 // against the last colour we saw. Without this, nudging the brightness would
 // kick the ring out of whatever scene it was running.
+//
+// s_ring_color_seen guards the very first comparison: with no prior colour to
+// compare against, the sentinel values below would otherwise have to double as
+// "no colour yet", and 255/255/255 is itself a colour a coordinator can
+// legitimately send (plain white). Without this flag, a fixture whose first
+// colour command after boot happened to be white would compare equal to the
+// sentinel and be silently ignored -- the ring would stay on whatever scene it
+// booted into instead of switching to white as commanded.
+static bool    s_ring_color_seen = false;
 static uint8_t s_ring_last_r = 255, s_ring_last_g = 255, s_ring_last_b = 255;
 
 // ── endpoint 1: the downlight ─────────────────────────────────────────────
@@ -195,7 +204,8 @@ static void on_downlight_change_hsv(bool state, uint8_t /*hue*/, uint8_t /*sat*/
 static void on_ring_change_rgb(bool state, uint8_t r, uint8_t g, uint8_t b, uint8_t level) {
     s_state.ring.on    = state;
     s_state.ring.level = level;
-    if (r != s_ring_last_r || g != s_ring_last_g || b != s_ring_last_b) {
+    if (!s_ring_color_seen || r != s_ring_last_r || g != s_ring_last_g || b != s_ring_last_b) {
+        s_ring_color_seen = true;
         s_ring_last_r = r;
         s_ring_last_g = g;
         s_ring_last_b = b;
@@ -211,12 +221,18 @@ static void on_ring_change_rgb(bool state, uint8_t r, uint8_t g, uint8_t b, uint
 // dropped the same way the downlight's were (item 1) unless this is
 // registered. RingState already stores hue/sat directly, so this sets them
 // without round-tripping through RGB the way on_ring_change_rgb has to.
+//
+// s_ring_hsv_seen guards the first comparison the same way s_ring_color_seen
+// does for the RGB path -- hue=0/sat=0 is itself a valid "white" command, not
+// just an unset sentinel.
+static bool    s_ring_hsv_seen = false;
 static uint8_t s_ring_last_hue = 0, s_ring_last_sat = 0;
 
 static void on_ring_change_hsv(bool state, uint8_t hue, uint8_t sat, uint8_t value) {
     s_state.ring.on    = state;
     s_state.ring.level = value;
-    if (hue != s_ring_last_hue || sat != s_ring_last_sat) {
+    if (!s_ring_hsv_seen || hue != s_ring_last_hue || sat != s_ring_last_sat) {
+        s_ring_hsv_seen = true;
         s_ring_last_hue = hue;
         s_ring_last_sat = sat;
         const LightMode was = s_state.ring.mode;
