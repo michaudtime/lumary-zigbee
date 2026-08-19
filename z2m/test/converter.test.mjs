@@ -107,18 +107,25 @@ await test('the endpoint map names both endpoints, with a default', () => {
 // light's effect_list with no endpoint filter (lib/extension/homeassistant.ts,
 // `case "light"`), so `effect: false` on the downlight's m.light() call above
 // does not stop this by itself. meta.overrideHaDiscoveryPayload is the hook
-// Z2M runs afterwards, once per light's discovery payload, with `object_id`
-// (`light_downlight` / `light_ring`) still present to key off.
+// Z2M runs afterwards, once per light's discovery payload.
+//
+// `payload.object_id` at that point is NOT the fixed `light_downlight` /
+// `light_ring` internal config id -- Z2M rewrites it to
+// `<device friendly name>_<suffix>` first (homeassistant.ts), so it varies per
+// device. Real values from the bench fixture "Overhead light test" below;
+// matching on the exact string `light_downlight` was this fix's first, wrong
+// attempt, and it shipped as a silent no-op until checked against a real
+// device rather than a synthetic payload.
 
 await test('overrideHaDiscoveryPayload strips effect/effect_list from the downlight', () => {
-    const payload = {object_id: 'light_downlight', effect: true, effect_list: ['none', 'chase']};
+    const payload = {object_id: 'overhead_light_test_downlight', effect: true, effect_list: ['none', 'chase']};
     def.meta.overrideHaDiscoveryPayload(payload);
     assert.equal(payload.effect, undefined);
     assert.equal(payload.effect_list, undefined);
 });
 
 await test('...but leaves the ring, which actually has the cluster, alone', () => {
-    const payload = {object_id: 'light_ring', effect: true, effect_list: ['none', 'chase']};
+    const payload = {object_id: 'overhead_light_test_ring', effect: true, effect_list: ['none', 'chase']};
     def.meta.overrideHaDiscoveryPayload(payload);
     assert.equal(payload.effect, true);
     assert.deepEqual(payload.effect_list, ['none', 'chase']);

@@ -155,14 +155,18 @@ export default {
         //
         // This is the hook Z2M offers for exactly that case: it runs once per
         // light's discovery payload, after Z2M has already built effect/effect_list
-        // onto it, with `object_id` still present (set a few lines earlier in the
-        // same function as `light_${endpointName}`, deleted nowhere before this
-        // call). Strip the two fields there instead of trying to keep them from
-        // being unioned in the first place, since that part isn't endpoint-aware
-        // and the definition has no say in it. Verified against Z2M 2.13.0's
-        // homeassistant.ts.
+        // onto it. `payload.object_id` is NOT the fixed `light_${endpointName}`
+        // internal config id -- a few lines before this call, Z2M rewrites it to
+        // `<device friendly name, lowercased, spaces->underscores>_<suffix>` (see
+        // homeassistant.ts: `payload.object_id = devicePayload.name...` then
+        // appends `config.object_id`'s suffix after its first underscore). So it
+        // varies per device/friendly-name and can only be matched by suffix, not
+        // by the exact string `light_downlight` -- that was this fix's first,
+        // wrong attempt: it silently matched nothing and shipped a no-op, caught
+        // only by checking live against a real device rather than the stub suite.
+        // Verified against Z2M 2.13.0's homeassistant.ts.
         overrideHaDiscoveryPayload: (payload) => {
-            if (payload.object_id === 'light_downlight') {
+            if (payload.object_id?.endsWith('_downlight')) {
                 delete payload.effect;
                 delete payload.effect_list;
             }
