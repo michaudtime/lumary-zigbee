@@ -1,9 +1,9 @@
 # Home Assistant polish — backlog
 
 **Date:** 2026-08-17
-**Status:** items 1, 2, 4 and 5 implemented and **verified on hardware** (bench-tested 2026-08-17
-against the fixture at `0x744dbdfffe6b575f`); item 9 implemented, bench verification outstanding;
-the rest are open
+**Status:** items 1, 2, 4, 5, 6 and 9 implemented and **verified on hardware** (bench-tested
+2026-08-17/18 against the fixture at `0x744dbdfffe6b575f`); item 9's downlight-effect-dropdown wart
+fixed 2026-08-19; the rest are open
 
 What it takes to make the fixture read as a finished product in Home Assistant rather than a
 working prototype. Written after auditing what HA actually sees today, so each item records the
@@ -248,14 +248,33 @@ and "Built-in Effects"), and **bench-verified on the fixture 2026-08-18**:
   static-init value, so it cannot distinguish a restore from a reset. Confirmed with a forced
   attribute read that bypasses Z2M's cache, on a cold boot with USB fully unplugged.
 
-**Wart found on the bench: the downlight's card also carries an effect dropdown.** Z2M's HA
-discovery unions every enum expose named `effect` into the light entity's `effect_list`, and that
-union is not endpoint-aware. Selecting one turns the downlight on -- HA bundles `state: ON` into
-every `light.turn_on` -- and then does nothing, because `tzEffect` resolves to endpoint 1, which
-carries no `0xFC00` cluster. Harmless, and not fixable from the converter: both `m.light()` calls
-already pass `effect: false`, and the expose is named `effect` precisely so it lands inside the
-light card instead of becoming a separate `select`. The real fix is making Z2M's discovery
-endpoint-aware, which belongs with item 10.
+**Wart found on the bench: the downlight's card also carries an effect dropdown -- FIXED
+2026-08-19.** Z2M's HA discovery unions every enum expose named `effect` into the light entity's
+`effect_list`, and that union is not endpoint-aware (`allExposes.filter(isEnumExpose).filter((e) =>
+e.name === 'effect')` in `lib/extension/homeassistant.ts`, no endpoint check at all). Selecting one
+turned the downlight on -- HA bundles `state: ON` into every `light.turn_on` -- and then did
+nothing, because `tzEffect` resolves to endpoint 1, which carries no `0xFC00` cluster.
+
+Turned out to be fixable from the converter after all, just not from the exposes/extend shape:
+`meta.overrideHaDiscoveryPayload` is a hook Z2M calls once per light's discovery payload, after it
+has already built `effect`/`effect_list` onto it, keyed on `object_id` (`light_downlight` /
+`light_ring`). The converter now strips both fields when `object_id === 'light_downlight'`. Verified
+against Z2M 2.13.0's `homeassistant.ts` and covered by two checks in `converter.test.mjs`. No firmware
+change, no re-interview needed -- restart Z2M with the updated converter installed.
+
+## Finding, fixed 2026-08-19: the ring's first white command after any boot could be silently dropped
+
+`on_ring_change_rgb`/`on_ring_change_hsv` in `zigbee_light.cpp` compare an incoming colour against
+the last one seen, to tell a genuine colour change from a plain dim (the ring reports state, level
+and colour together on every change). The "last colour seen" sentinel was `{255,255,255}` / `hue=0,
+sat=0` -- itself a valid white command, not just an unset marker -- and those sentinels reset on
+every boot. So the very first colour command after any boot or rejoin that happened to be white
+compared equal to the sentinel and was silently ignored: the ring stayed on whatever scene it
+booted into instead of switching to white as commanded. Fixed by adding explicit
+`s_ring_color_seen`/`s_ring_hsv_seen` flags so the first command is always applied, regardless of
+what it is. This code path is in the untested Zigbee-adapter layer -- `light_state.h`'s host tests
+cover `ring_set_color()` itself but not this dedup -- so nothing in the test suite would have caught
+it. Bench-verified working after the fix.
 
 **Rollout needs two steps, not one, and this session proved it the hard way.** The updated converter
 must be installed in `data/external_converters/` and Z2M restarted *before* the re-interview means

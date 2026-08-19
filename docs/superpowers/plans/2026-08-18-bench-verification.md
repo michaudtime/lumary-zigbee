@@ -252,7 +252,7 @@ Two candidate responses, deliberately not actioned mid-bench:
 - [x] `fx_breathing` behaves correctly through its trough at usable brightness. (At low brightness
       it is subject to the collapse finding above, like every other effect.)
 
-### WART: the downlight's effect dropdown turns the light on and does nothing else
+### WART: the downlight's effect dropdown turns the light on and does nothing else -- FIXED 2026-08-19
 
 Observed: with the downlight off, selecting an effect from its card **turns the downlight on**. With
 it already on, cycling through effects changes nothing at all. The ring is unaffected throughout.
@@ -269,11 +269,12 @@ Both halves follow from code:
 So the §2 union finding resolves as: harmless but untidy. Nothing is corrupted and the ring is never
 disturbed; the downlight card simply carries a control that does nothing except switch the light on.
 
-Suppressing it is not available through the converter. `z2m/lumary-brain-revA.js:46` already records
-why the expose is named `effect` -- that exact name is what makes it a first-class light control on
-the ring rather than a separate `select` entity -- and Z2M's discovery union is the price. Both
-`m.light()` calls already pass `effect: false`. The real fix is making Z2M's HA discovery
-endpoint-aware, which belongs with item 10 (upstreaming the converter).
+Turned out to be suppressible after all, just not from the exposes/extend shape that seemed like the
+only lever at the time: `meta.overrideHaDiscoveryPayload` runs once per light's discovery payload
+*after* Z2M has already unioned `effect`/`effect_list` onto it, keyed on `object_id`
+(`light_downlight` vs `light_ring`), so the converter can strip both fields for the downlight without
+touching the ring's. `z2m/lumary-brain-revA.js:46` still records why the expose has to be named
+`effect` in the first place. See `2026-08-17-home-assistant-polish.md` item 9 for the full writeup.
 
 Worth capturing the Z2M log line for the failed `setEffect` next time the fixture is on the bench;
 it would confirm whether the command errors or is silently absorbed.

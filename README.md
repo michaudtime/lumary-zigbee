@@ -358,7 +358,7 @@ node z2m/test/converter.test.mjs
 - [x] Task 6: Zigbee basics
 - [x] Task 7: Zigbee color + effect selection
 - [x] Task 8: Zigbee OTA
-- [ ] Task 9: BLE OTA fallback -- deferred, never implemented; see "OTA Updates" above
+- [ ] Task 9: BLE OTA fallback -- won't do (decided 2026-08-19); see "OTA Updates" above
 - [ ] Task 10: Integration + validation -- bench-verified end to end
       (`docs/superpowers/plans/2026-08-18-bench-verification.md`, §§1-9); still open: the
       already-paired-fixture upgrade path, and sign-off from an installed ceiling location

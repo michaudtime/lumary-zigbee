@@ -466,6 +466,24 @@ written against single-endpoint examples.
 > Still do the in-ceiling OTA knowing there is no recovery path: the BLE fallback the README used to
 > promise was never implemented, so a failed in-ceiling update means pulling the can.
 >
+> **BLE OTA is now a firm won't-do, not just an unimplemented gap -- decided 2026-08-19.** The two
+> mitigations that exist instead: `esp_task_wdt_*` is now actually armed in `main.cpp` (the
+> `WDT_TIMEOUT_MS` constant had sat unused since Task 1's scaffold), so a hang reboots the fixture
+> rather than sitting there forever, and OTA itself is now proven end to end at the bench. Neither
+> replaces physical USB access as the real recovery path; a fixture that can't be reached by Zigbee
+> OTA still needs the can pulled. Boot-verified clean at the bench; not yet verified to actually
+> recover from a real hang -- that would mean deliberately hanging an installed fixture, which hasn't
+> been done.
+>
+> **Also fixed 2026-08-19, same hardening pass: `scene_store_load()` could return an uninitialized
+> value.** Only the `type` key's NVS read was checked; `hue`/`sat`/`bri`/`spd` were read into locals
+> with no status check. `scene_store_save()` writes its five keys one at a time before a single
+> commit, so a power loss mid-save -- exactly the kind of event a mains-powered ceiling fixture sees
+> -- could leave some keys present and others missing, and a later load would copy an indeterminate
+> stack value into the returned `EffectParams`. Every read is now checked, with the same
+> default-params fallback `type` already had. Neither this nor the watchdog fix is covered by the
+> host test suite -- both live in the ESP-IDF-dependent layer the native tests can't reach.
+>
 > **Resolved, and it is a Home Assistant display issue only.** After the update HA's device registry
 > kept reporting `sw_version: 1.0.0`, and a manual re-interview did not clear it -- which raised the
 > real possibility that the image had transferred without being booted. Zigbee2MQTT's own interview
@@ -502,5 +520,5 @@ sections 1–9 — so this task is the only remaining gate on signing off rev A.
 ## Self-review notes
 
 - **Spec coverage:** §3 measured facts → Phase 0; §4.1 power → 1.1/2.1; §4.2 white → 0.4/1.2/2.4/6.3; §4.3 ring → 0.3/2.3/6.2; §4.4 MCU/USB → 2.2/6.1; §4.5 field control → firmware (tracked, see below); §5 Phase 0 → Phase 0; §6 BOM → 1.3; §7 firmware → Phase 5; §8 validation → Phase 6; §9 workflow → Phases 2–4.
-- **Deferred (not in this plan):** the firmware power-cycle reset / BLE-OTA-trigger rework (spec §4.5) is a separate firmware effort — flag for its own brainstorm/plan after the board is proven.
+- **Won't do, decided 2026-08-19 (was: deferred):** the firmware power-cycle reset / BLE-OTA-trigger rework (spec §4.5). Zigbee OTA is proven end to end at the bench and `esp_task_wdt_*` is now actually armed, so a hang reboots rather than hanging forever; BLE OTA would only help the narrower case of Zigbee OTA itself being unreachable, and isn't being built for that. See Task 6.4's note.
 - **Dependency variables** (`I_set`, `Vf_total`, headroom, connector pitch, pixel count) are all defined by explicit Phase 0 tasks and consumed by name downstream.

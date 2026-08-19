@@ -1296,6 +1296,14 @@ git commit -m "feat: add Zigbee OTA upgrade cluster"
 
 ## Task 9: BLE OTA Fallback
 
+> **Status: won't do — decided 2026-08-19.** Never implemented past this plan (no `src/ble_ota.*`
+> exists, `PIN_BLE_OTA_BUTTON` in `src/config.h` is unreferenced). Zigbee OTA is now proven end to
+> end at the bench (see `2026-08-01-brain-replacement-board.md` Task 6.4), and the app watchdog is
+> now actually armed so a hang reboots rather than hanging forever -- see the same doc. Neither
+> replaces physical USB access as the real recovery path if Zigbee OTA itself can't reach a fixture;
+> BLE OTA isn't being built to cover that narrower case. README's OTA Updates section documents the
+> resulting "no fallback" behaviour explicitly rather than leaving it implied.
+
 **Files:**
 - Create: `src/ble_ota.h`
 - Create: `src/ble_ota.cpp`
