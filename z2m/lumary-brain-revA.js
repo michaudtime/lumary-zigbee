@@ -142,7 +142,32 @@ export default {
     // downlight keeps endpoint 1 so existing switch bindings land on the main
     // light; the ring is the new endpoint 2.
     endpoint: (device) => ({downlight: 1, ring: 2, default: 1}),
-    meta: {multiEndpoint: true},
+    meta: {
+        multiEndpoint: true,
+        // Z2M's HA discovery (lib/extension/homeassistant.ts, the `case "light"` block)
+        // builds each light's effect_list from every enum expose named `effect`
+        // anywhere on the DEVICE, not just the ones scoped to that light's own
+        // endpoint -- `allExposes.filter(isEnumExpose).filter((e) => e.name ===
+        // 'effect')`, with no endpoint filter at all. So `effect: false` on the
+        // downlight's m.light() call above (which only stops light() contributing
+        // its OWN effect expose) does nothing to stop the ring's `effect` expose
+        // from being unioned into the downlight's card too.
+        //
+        // This is the hook Z2M offers for exactly that case: it runs once per
+        // light's discovery payload, after Z2M has already built effect/effect_list
+        // onto it, with `object_id` still present (set a few lines earlier in the
+        // same function as `light_${endpointName}`, deleted nowhere before this
+        // call). Strip the two fields there instead of trying to keep them from
+        // being unioned in the first place, since that part isn't endpoint-aware
+        // and the definition has no say in it. Verified against Z2M 2.13.0's
+        // homeassistant.ts.
+        overrideHaDiscoveryPayload: (payload) => {
+            if (payload.object_id === 'light_downlight') {
+                delete payload.effect;
+                delete payload.effect_list;
+            }
+        },
+    },
     extend: [
         // `effect: false` because light() otherwise exposes the standard
         // Identify trigger-effects (blink, breathe, okay, ...) and wires them to

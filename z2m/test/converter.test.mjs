@@ -102,6 +102,28 @@ await test('the endpoint map names both endpoints, with a default', () => {
     assert.equal(def.meta.multiEndpoint, true);
 });
 
+// ── the downlight's card must not inherit the ring's effect list ──────────
+// Z2M's HA discovery unions every `effect`-named expose device-wide into each
+// light's effect_list with no endpoint filter (lib/extension/homeassistant.ts,
+// `case "light"`), so `effect: false` on the downlight's m.light() call above
+// does not stop this by itself. meta.overrideHaDiscoveryPayload is the hook
+// Z2M runs afterwards, once per light's discovery payload, with `object_id`
+// (`light_downlight` / `light_ring`) still present to key off.
+
+await test('overrideHaDiscoveryPayload strips effect/effect_list from the downlight', () => {
+    const payload = {object_id: 'light_downlight', effect: true, effect_list: ['none', 'chase']};
+    def.meta.overrideHaDiscoveryPayload(payload);
+    assert.equal(payload.effect, undefined);
+    assert.equal(payload.effect_list, undefined);
+});
+
+await test('...but leaves the ring, which actually has the cluster, alone', () => {
+    const payload = {object_id: 'light_ring', effect: true, effect_list: ['none', 'chase']};
+    def.meta.overrideHaDiscoveryPayload(payload);
+    assert.equal(payload.effect, true);
+    assert.deepEqual(payload.effect_list, ['none', 'chase']);
+});
+
 // ── identify ──────────────────────────────────────────────────────────────
 // The commissioning button. Verified against zigbee-herdsman-converters
 // 26.90.0: m.identify() exposes an enum named `identify`, not `effect`, so it
