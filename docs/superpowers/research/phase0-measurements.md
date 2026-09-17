@@ -14,11 +14,20 @@ Plan: `docs/superpowers/plans/2026-08-01-brain-replacement-board.md`
 
 ---
 
-## P0.1 — Connectors  (Task 0.1)
+## P0.1 — Connectors  (Task 0.1)  — DONE (CN1 corrected; physical 1..7 order still TODO)
 Measure pitch with calipers → JST family: 1.0 mm=SH, 1.25 mm=GH, 1.5 mm=ZH, 2.0 mm=PH.
 
 - Power-in:  **soldered on stock board (no existing connector).** New board = **3-pin JST-PH 2.0 mm (polarized) + parallel solder pads** (DECIDED — both options on the footprint; user has PH stock). Wires: GND / 36 V / 4.7 V. Pin order on our connector is our choice → keep GND on an end pin, key so 36 V can't swap with 4.7 V.
-- CN1:       pins = **7 (6 populated, 1 empty)**   pitch = **1.25 mm**   JST family = **Molex PicoBlade** (friction-only fit rules out JST-GH's latch)   physical pin order (1..7) = `___ (TODO from scan)`
+- CN1:       pins = **7 (6 populated, 1 empty)**   pitch = **1.5 mm**   JST family = **ZH, 7-position** —
+  **corrected 2026-09-04**: physically verified against the stock connector with purchased ZH1.5 7P
+  parts (mates cleanly). Supersedes the earlier 1.25 mm/PicoBlade reading, which rev A's J2 was
+  fabbed against and which does **not** mate (see `docs/research/teardown-reference.md`). Rev A's
+  board and BOM (`hardware/kicad/footprints-and-pins.md`, `hardware/bom.csv`) still specify
+  `Molex_PicoBlade_53047-0710_1x07_P1.25mm_Vertical` for J2 — needs a rev B footprint swap to a JST
+  ZH 1.5mm 7-position part before CN1 will mate.  physical pin order (1..7) = `___ (TODO from scan)`
+  **Plan:** no KiCad/BOM respin yet — bringing up the existing 5 rev A boards with a short
+  ZH1.5-7P-to-PicoBlade-7P pigtail adapter instead. Revisit the J2 footprint for a rev B only if/when
+  another fab run happens.
 
 ---
 
