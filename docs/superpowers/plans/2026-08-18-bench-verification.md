@@ -1,7 +1,7 @@
 # Bench verification — everything outstanding
 
 **Date:** 2026-08-18
-**Status:** in progress — §§1-9 done 2026-08-18; §10 partial, §11 outstanding
+**Status:** in progress — §§1-9 done 2026-08-18; §10 partial; §11 in progress (installed in the loft 2026-09-15)
 
 Three separate bodies of work are merged to `main` and unverified on hardware. This consolidates
 their outstanding checks into one session, in an order chosen so that each check does not mask the
@@ -420,11 +420,114 @@ Observed: ______________________________________________
 
 Still open from the board plan, and the gate on signing off rev A.
 
-- [ ] Unplug the stock board, plug the new one into the existing harnesses, power the real driver
+**Installed 2026-09-15** in the loft ceiling: the bench fixture (`0x744dbdfffe6b575f`), renamed
+"Loft Overhead Light" and running firmware 2.0.1. HA shows both light entities with the expected
+shapes (downlight `color_temp` 2702–6493 K; ring `xy` plus the six effects and `none`), and the
+device is assigned to the Loft area. First report: "everything is seeming good" -- the individual
+checks below are ticked only where they have been confirmed specifically.
+
+- [x] Unplug the stock board, plug the new one into the existing harnesses, power the real driver
 - [ ] Both light sources work in the fixture
 - [ ] Zigbee binding to the Inovelli works from the installed location
-- [ ] RSSI in Z2M better than −70 dBm
-- [ ] A real Zigbee OTA completes from the installed location
+- [x] Link quality from the installed location: **LQI 126** (Z2M dashboard, 2026-09-15). Z2M reports
+      LQI rather than RSSI, so the original "better than −70 dBm" criterion is recorded as LQI
+      instead; 126/255 is a solid link. `sensor.loft_overhead_light_linkquality` is now enabled in
+      HA, so the value is recorded over time rather than spot-checked.
+- [ ] A real Zigbee OTA completes from the installed location — **FAILED 2026-09-16.** Three
+      attempts at 2.0.1 -> 2.0.2, none past ~6%; see below and
+      [`docs/research/ota-throughput.md`](../../research/ota-throughput.md). **This gates flashing
+      the other four rev A boards into ceilings**: a fixture that cannot be updated over the air,
+      and whose failed update sometimes takes the radio with it, should not go somewhere that needs
+      a ladder. The fixture itself is fine and fully usable on 2.0.1 throughout — the image only
+      switches after a complete, verified download, so a failed attempt costs nothing but time.
+
+### Three sessions, three deaths, all in the same offset band
+
+| Session | Duration | Reached | Aftermath |
+|---|---|---|---|
+| 09-15 20:14 - ~20:50 | 36 min | 6.24% ~ 53 KB | aborted deliberately (Z2M restart, to change chunk size) |
+| 09-16 07:21 - 07:52 | 31 min | ~5.7% ~ 48 KB | **fixture silent ~9 h** until the user reset it |
+| 09-16 17:05 - 19:12 | 127 min | ~36-40 KB (est.) | fixture stayed reachable (LQI 60 at 20:04) |
+
+Durations and rates differ wildly; the offsets do not. ~36-53 KB at 50 B/block is roughly
+750-1,100 blocks. That argues for a fixed-offset or block-count fault rather than a timeout, and it
+is the most promising lead -- but it needs serial to chase, so it belongs on the bench.
+
+**The user recalls the August bench OTA being slow too.** Nobody timed it, so that is a memory
+rather than a number, but it rules out the ceiling and the radio as the cause and makes this a
+firmware/stack problem. First bench task is therefore simply to *time* an OTA with the monitor
+attached.
+
+### OTA from the ceiling is slow: ~26-30 B/s, ~9 h for an 844 KB image
+
+Measured over 32 consecutive block exchanges (2026-09-15 20:43:43-20:44:34):
+
+```
+requests 32   responses 32   dataSize 50B x32   duplicate offsets 0
+linkQuality on received frames: min 90  max 126  mean 98
+gap between requests: min 0s  max 9s  mean 1.65s   (0s x14, 1s x7, 3s x5, 4s x6, 6s x2, 9s x1)
+throughput 30.4 B/s        Z2M: "at 5.74%, 25465 seconds remaining"
+```
+
+**The pacing is not Z2M's.** Every request is answered in the same second, sends/responses/requests
+are 1:1 with no retransmission, and no offset is ever re-requested. Inside a burst the spacing is
+~250 ms, which is exactly Z2M's `image_block_response_delay` -- that is the healthy cadence, ~4
+blocks/s. The 3-9 s stalls are the *fixture* not asking.
+
+The first hypothesis here was uplink loss with stack retries. **That is now largely ruled out**:
+in the third session the throughput kept falling (11 -> 5 -> 4.7 B/s) while link quality *recovered*
+(54 -> 102), and the August bench run -- USB-powered, feet from the coordinator -- was slow as well.
+A radio explanation cannot produce either of those.
+Second candidate, also unproven: `ZigbeeHandlers.cpp:396` does a `log_i` on **every block**, and
+with `CORE_DEBUG_LEVEL=3` and `ARDUINO_USB_CDC_ON_BOOT=1` those writes can block when no USB host
+is attached -- the same bench-vs-ceiling difference that caused the section 8 boot failure. Magnitude
+argues against it (~100 ms/write, not 9 s). Deciding between them needs device-side serial, so it
+belongs on the bench with one of the other four rev A boards, not here.
+
+### 100-byte blocks do not get through at all -- 50 is the practical maximum
+
+The device advertises `maximumDataSize: 223` on every request (the Arduino library's default;
+`addOTAClient()` is called without the `max_data_size` argument). Z2M trims to 50 because of
+`ota.default_maximum_data_size`, whose **schema caps at 100** -- 223 is not reachable from the
+settings UI regardless.
+
+At 100 the transfer dies immediately:
+
+```
+07:18:55  Payload offsets: start=0 end=100 dataSize=100
+07:19:05  Image block response failed ... fileOffset=0 dataSize=100
+          failed (Data request failed with error: 'TIMEOUT')
+07:19:37  OTA update failed with reason: ABORT
+```
+
+The device re-requested offset 0, so neither 100-byte response reached it. A 100-byte OTA payload
+plus ZCL/OTA headers exceeds what a single unfragmented Zigbee APS frame carries (~82-108 bytes
+depending on security and source routing). At 50 there were zero delivery failures in any sample.
+**Conclusion: the 50-byte default is not a conservative guess to be tuned away -- it is the working
+value. ~9 h is the floor for this image until the firmware-side gap is understood.**
+
+### An interrupted OTA cannot be retried remotely -- it needs a power cycle
+
+Found the hard way: a session was deliberately aborted at 6% (by restarting Z2M, to change chunk
+size). Both retries afterwards failed **two blocks in**, identically:
+
+```
+20:53:32  Request offsets: fileOffset=0   maximumDataSize=223
+20:53:35  Request offsets: fileOffset=50  maximumDataSize=223
+20:53:41  OTA update ... failed with reason: INVALID_IMAGE      (upgrade end request, status 150)
+```
+
+Z2M re-read and re-parsed the image correctly both times, and the first attempt after a clean boot
+had run to 6% with the same file. Suspected cause, **unproven**: the OTA state does not reset on
+abort -- `zb_ota_upgrade_status_handler()` (`ZigbeeHandlers.cpp:363`) keeps `static uint32_t offset`
+and a stateful `esp_element_ota_data()` across sessions, and nothing clears either on failure.
+
+**Why this matters more than the speed:** there is no BLE fallback and no remote reboot command, so
+a fixture whose OTA is interrupted -- by a Z2M restart, a coordinator reboot, or a power blip
+mid-transfer -- cannot be recovered over the air at all. In a ceiling that means the breaker. Two
+firmware follow-ups fall out of this: reset the OTA state on abort so a retry works, and provide
+some remote reboot path. Both are strictly more valuable than making the transfer faster.
+
 
 That last one also settles **design risk 2**: one OTA client registered on endpoint 1 while two
 endpoints exist. The library's OTA support was written against single-endpoint examples.
