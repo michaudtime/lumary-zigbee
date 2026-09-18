@@ -89,22 +89,86 @@ From the [ZCL OTA Upgrade cluster guide](https://docs.espressif.com/projects/esp
    re-requests OTA on join, and can re-enter the same state. Not confirmed; would explain both the
    deaths and the silences.
 
+## Bench runs, 2026-09-18 (Test Unit 2, `0x744dbdfffe6d65c8`, USB-powered, logger attached)
+
+A second rev A board, flashed with 2.0.1, a few feet from the coordinator, with
+`scripts/serial-log.py` capturing the device's own per-block log line (millisecond device clock, so
+USB batching doesn't matter). Captures are in `build/ota-logs/` (git-ignored).
+
+**The bench is exactly as slow as the ceiling: 30.5 B/s.** The user's recollection of the August
+bench run was right, and distance/placement is ruled out for good.
+
+**The stalls are quantized.** Gaps between received blocks are either ~270 ms (healthy: Z2M's
+250 ms `image_block_response_delay` plus a few ms) or a multiple of **~3.27 s** -- nothing in
+between:
+
+```
+first 52 blocks, baseline:  <400ms x34   400ms-3s x0   3-6s x13   >=6s x4
+stall sizes in 3.27s quanta: x1 13, x2 2, x3 2        89% of wall time stalled
+```
+
+**During a stall Z2M never hears the request until the attempt that works.** For the two long
+stalls inside Z2M's log window, Z2M first saw the late request 8.8-9.4 s after the previous block,
+and the device logged the block 0.4-0.6 s later. So the time is lost *before* the request reaches
+Z2M: an attempt fails, a fixed ~3.27 s timer expires, and it is retried -- up to three times.
+~3 s matches the order of ZBOSS's APS ack-wait for a non-sleepy destination; not confirmed.
+
+There is also a single **48.29 s** stall per session (48,285 ms and 48,289 ms in two runs, at
+different offsets) -- a second fixed timer, presumably the OTA client's own give-up-and-re-request.
+
+**The 50 KB death did not reproduce on the bench.** The baseline run passed 309 KB (36%) with no
+error, no reset and no gap in the log before it was stopped deliberately. The one difference from
+the ceiling is that this board has a USB host attached -- the same bench-vs-deployed difference that
+caused the section 8 boot failure. That is now the lead for the field deaths, not the offset.
+
+### Hypotheses tested and refuted
+
+| Run | Change (one variable) | Stalled exchanges | Time stalled | Verdict |
+|---|---|---|---|---|
+| baseline | -- | 32% | 88% | |
+| 2 | Stop rendering and yield (`onOTAStateChange` hook, `delay(20)`) while OTA active; hook confirmed firing | 37% | 92% | **refuted** -- not CPU starvation |
+| 3 | `esp_ieee802154_set_cca_mode(CARRIER)` instead of energy-detect at -75 dBm; confirmed in force every 60 s | 28% | 90% | **refuted** -- not Wi-Fi energy / channel access |
+
+Both experiments were reverted rather than stacked. Healthy-exchange time was unchanged across all
+three (~270-300 ms), so the device processes a block quickly; it is the ~30% of exchanges that fail
+and wait out a retry timer that cost 90% of the time.
+
+### Root cause found: an aborted OTA can't be retried
+
+The ceiling's `INVALID_IMAGE` on retry (section 11) is explained by the Arduino library.
+`zb_ota_upgrade_status_handler()` (`ZigbeeHandlers.cpp:363`) keeps file-static `offset`,
+`total_size` and `s_tagid_received`, and resets them **only** in the
+`ESP_ZB_ZCL_OTA_UPGRADE_STATUS_CHECK` case (a successful end). `ESP_ZB_ZCL_OTA_UPGRADE_STATUS_ABORT`
+falls into `default:`, which only logs -- no reset, and no `zbOTAState(false)` either. So after an
+abort, the next session's first block is fed to a parser that believes it is mid-image. Only a
+reboot clears it. Consequences for our firmware:
+
+- Anything gated on the library's OTA-active notification can stick "active" after an abort.
+- A fix has to live on our side (a library patch is not under our control): e.g. detect an OTA that
+  has gone quiet and reboot, since reboot is the only thing that resets the library's state.
+
 ## Next steps, in order
 
-1. **Bench reproduction with serial attached** -- a spare rev A board flashed with 2.0.1 in the
-   bench fixture, OTA run with the monitor open, and *timed*. This is the only way to see whether
-   the deaths are watchdog panics, and to get a baseline number for the August run.
-2. **Cheap experiments, one at a time**, measured against that baseline:
-   - `CORE_DEBUG_LEVEL=0` (or gate the library's per-block log) -- tests candidate 1, and shrinks
-     the image.
-   - Use `onOTAState` to stop rendering during OTA -- tests candidate 2.
-   - Z2M `image_block_response_delay: 250 -> 50` -- independent of the firmware, worth ~5x on
-     paper, but only after the device-side limit is understood, or it will be masked.
-3. **Shrink the image.** 844 KB is several times a typical Zigbee device firmware, and every
-   optimization above is multiplied by whatever the image size ends up being.
-4. **Make an interrupted OTA survivable** -- reset the OTA state on abort, and provide a remote
-   reboot path. See section 11; this matters more than throughput, because it is what turns a slow
-   update into an unrecoverable one.
+Updated after the 2026-09-18 bench runs. Done: bench reproduction and timing (step 1 of the
+original list); render starvation and CCA both refuted.
+
+1. **Find where the failed ~30% of exchanges die -- on the air.** Both ends look identical from
+   their own logs: the device waits, Z2M hears nothing. An 802.15.4 sniffer on channel 25 settles it
+   in one capture: if the lost block requests are on the air and the coordinator doesn't ack them,
+   it is the coordinator/route side; if they never appear, it is the device side. A spare rev A
+   board (ESP32-H2) can run as a sniffer into Wireshark, so no new hardware is needed.
+2. **Check the route.** Z2M's `linkquality` is the LQI of the *last hop* into the coordinator, not
+   necessarily of the device itself. If Test Unit 2 reaches the coordinator through another
+   router, that hop's losses would look exactly like this. A Z2M network map answers it.
+3. **Reproduce the field deaths on the bench** by removing the difference that matters: run an OTA
+   with the board powered but *no USB host* (4.7 V input, or a charger-only USB supply), and
+   capture what happens around 36-53 KB. The per-block `log_i` over an unconnected USB CDC is the
+   leading suspect.
+4. **Make an interrupted OTA survivable** -- see the root cause above. A stalled-OTA watchdog that
+   reboots is the one fix fully under our control. This matters more than throughput.
+5. **Then the throughput levers**, measured one at a time against the baseline: shrink the image
+   (`CORE_DEBUG_LEVEL=0` also removes the per-block log), then Z2M `image_block_response_delay`.
+   The latter only speeds the ~10% of time spent in healthy exchanges until the losses are fixed.
 
 ## Sources
 
