@@ -448,8 +448,21 @@ checks below are ticked only where they have been confirmed specifically.
       loft's own 2.0.1 -> 2.0.2 attempt was power-cycled via the Inovelli's Smart Bulb Mode and
       restarted 2026-09-18 23:27. It then failed at ~01:19 past 43%, slowed by eight Inovelli
       switches updating at the same time. The cause was lost to Z2M's ~10-minute debug-log
-      rotation. **Still open:** the loft on 2.0.1 needs one more power cycle, then a scheduled
-      update to 2.1.0. From 2.1.0 on, a failed attempt retries by itself.
+      rotation.
+      **2026-09-19, loft 2.0.1 -> 2.1.0:** the update was scheduled, the fixture power-cycled
+      (07:00) and the update started at 07:05. There was no `INVALID_IMAGE`, so the power cycle had
+      cleared the stuck state. It ran at ~95 B/s, slower than the bench, to **72% (offset
+      609,000)**. From ~09:00 the coordinator's block *responses* stopped reaching the fixture. The
+      loft re-requested 609,000 at 09:00:56, 09:00:59 and 09:01:41, and Z2M answered all three.
+      Then the loft aborted (`upgradeEndRequest` status 149) at 09:02:26. Its upstream was fine:
+      attribute reports kept arriving at LQI 134-142. A second power cycle and retry (09:04) got
+      **no block through at all**: offset 0 was requested at 09:04:40, 09:05:26 and 09:06:10,
+      answered every time, and the attempt aborted at 09:06:55. This is the "lost response"
+      failure from `ota-throughput.md`, here sustained, and on the downlink only. Short
+      coordinator frames still arrived (a Basic read and the image-query response), so the path
+      loses the large block responses, not everything. **Still open:** the loft stays on 2.0.1,
+      and the Z2M schedule stays set. The downlink to the loft needs looking at before another
+      attempt, each of which costs a power cycle until the loft runs 2.1.0.
 
 ### Three sessions, three deaths, all in the same offset band
 
