@@ -133,6 +133,125 @@ Both experiments were reverted rather than stacked. Healthy-exchange time was un
 three (~270-300 ms), so the device processes a block quickly; it is the ~30% of exchanges that fail
 and wait out a retry timer that cost 90% of the time.
 
+### Network map, 2026-09-18: the Lumary boards rate the coordinator at LQI 0
+
+A Z2M raw network map (`type: raw, routes: true`, 62 nodes, 928 links) shows an asymmetry that no
+other router on the network has:
+
+| | Coordinator hears it | It rates the coordinator | Its route to the coordinator |
+|---|---|---|---|
+| Test Unit 2 (bench) | LQI 82, direct | **LQI 0** | **none** -- table holds a route to *its own* address via a plug, and a discovery stuck `DISCOVERY_UNDERWAY` |
+| Loft Overhead Light | LQI 89, direct | **LQI 0** | via Living Room Light Switch (2 hops) despite the direct link |
+| every other router listing the coordinator | -- | LQI 36-239 | -- |
+
+The coordinator's own route to Test Unit 2 is direct. The **median** LQI across each Lumary
+board's whole neighbour table is 0.
+
+Hypothesis, **not yet confirmed**: the ESP32-H2 stack believes its links are far worse than they
+are. LQI 0 maps to the maximum link cost (7), so the board avoids its good direct link to the
+coordinator and relies on route discovery and multi-hop paths, which intermittently fail and wait
+out retry timers. It fits every observation so far -- requests that never reach Z2M, fixed timers,
+no sensitivity to CPU load or CCA -- and it would affect *all* traffic these boards send to the
+coordinator, with OTA merely the only workload heavy enough to make it visible. Low neighbour-table
+LQI from Espressif 802.15.4 parts is a reported upstream issue
+([esp-zigbee-sdk #418](https://github.com/espressif/esp-zigbee-sdk/issues/418), ESP32-C6,
+esp-zigbee-lib 1.4.0); no maintainer diagnosis is visible there.
+
+Next evidence: dump the board's *own* neighbour and routing tables (`esp_zb_nwk_get_next_neighbor()`,
+`esp_zb_nwk_get_next_route()` -- `lqi`, `rssi`, `outgoing_cost`, `age`, route state) to serial
+periodically during an OTA, and line route changes up against the stalls.
+
+### Confirmed by instrumentation: the ESP32-H2 zeroes LQI below ~-80 dBm, and the route flaps
+
+A diagnostic build dumped the board's own neighbour and routing tables every 30 s
+(`esp_zb_nwk_get_next_neighbor()` / `esp_zb_nwk_get_next_route()`, copied out under
+`esp_zb_lock_acquire()` and logged after release). Findings:
+
+- **The LQI the ESP32-H2 reports is a steep function of RSSI:** -55 dBm -> 127, -67 -> 66,
+  -69 -> 56, -71 -> 45, -78 -> 10, -79 -> 5, **-83 dBm and weaker -> 0**. That is a straight line
+  to zero at about -80 dBm -- a signal 802.15.4 can still use (sensitivity ~-100 dBm). The value
+  comes up from the radio driver (`esp_ieee802154_get_recent_lqi()`); nothing in the driver or the
+  Zigbee stack exposes the mapping. Still present in esp-zigbee-lib **1.6.8** / esp-zboss-lib
+  **1.6.4** (Arduino core 3.3.11); upstream is at 2.0.4.
+- **With the coordinator at -87 to -97 dBm the board scored it LQI 0**, so every link below the
+  cliff got the same worst cost and the stack could not tell a -83 dBm link from a -97 dBm one.
+  In 10 minutes the route to the coordinator changed 11 times -- via -70, -86, -93 and -97 dBm
+  hops, or no route at all -- and the coordinator repeatedly aged out of the neighbour table.
+  Stall windows lined up with the churn; the one stable window (route pinned on a -70 dBm hop)
+  ran at 173 B/s with 1% stalls.
+
+The coordinator is a Sonoff ZBDongle-P (CC2652P) in a comm closet a floor below the bench and the
+loft, which is why the path loss was so high.
+
+### Coordinator changes, 2026-09-18: transmit power, firmware, extension cable
+
+| Change | Coordinator RSSI at the board | Board's LQI for it | Route | OTA (first ~5 min) |
+|---|---|---|---|---|
+| baseline: fw `20210708`, default TX power, dongle in the server | -90 dBm | 0 | flapping, rarely direct | 25 B/s, 21% stalled (30%+ over long runs) |
+| `advanced.transmit_power: 20` (old firmware) | -84 dBm (+6 dB only) | 0 | still flapping | 21 B/s, 26% -- no improvement |
+| **+ Z-Stack `20250321` + USB 2.0 extension cable** | **-67 dBm** (-73..-64) | **up to 81** | **direct** -- mostly no route entry needed | **73 B/s, 11% stalled**, steady 53-87 B/s per minute |
+
+`transmit_power` alone gained only ~6 dB on the old firmware and was not enough. The new firmware
+and moving the dongle off the server's USB ports on an extension cable went in together, so their
+individual contributions are not separated -- but together they lifted the coordinator ~23 dB at
+the board, clear of the LQI cliff, and the route stopped flapping.
+
+What remains: ~11% of exchanges still wait out the 3.27 s timer, which is still ~62% of the time.
+~73 B/s puts the 844 KB image at ~3.2 h -- down from 7-10 h, not yet fast.
+
+### First long run on the new coordinator: 67.7%, then a fatal lost response
+
+Run 6 (18:04-19:42) averaged **~100 B/s** -- accelerating from ~66 to ~136 B/s per 15-minute
+window -- and passed the old 36-53 KB death zone without incident. It reached **571,694 bytes
+(67.7%)** and then died in a way none of the earlier runs did. Lined up across both logs (the Z2M
+host clock runs ~8 s ahead of the PC):
+
+```
+Z2M 19:40:41  imageBlockResponse fileOffset 571650  -> board logs progress 571694
+Z2M 19:40:41  imageBlockResponse fileOffset 571700  -> board NEVER logs it
+              (no further request from the board reaches Z2M -- no 3.27 s retries either)
+board 19:42:47  zb_ota_upgrade_status_handler(): OTA status: 4        (ABORT, ~134 s later)
+Z2M ~19:43-44   session closed on its 150 s image_block_request_timeout
+```
+
+The link was strong throughout: the board's 30 s dumps show the coordinator at -63..-65 dBm,
+LQI 76-86, and the stack lock was always free within 100 ms, so the Zigbee task was not hung.
+
+**Model that now fits every observation today:**
+
+- **A lost *request*** (board -> coordinator) is never APS-acknowledged, so the stack retransmits
+  it on its ~3.27 s timer. Those are the stalls: slow but self-healing.
+- **A lost *response*** (coordinator -> board) is fatal. The request *was* delivered and acked,
+  so nothing below ZCL retries; the OTA client waits for a block that never arrives and, after
+  ~134 s, aborts the whole upgrade instead of re-requesting the offset. Combined with the
+  library's abort bug (below), the board then cannot retry until it reboots.
+
+With ~17,000 exchanges per image, even a small per-exchange response-loss probability makes a
+full transfer a gamble. Priorities follow directly: (1) recover from an abort automatically --
+reboot on a stalled/aborted OTA so Z2M can re-offer without anyone touching the fixture;
+(2) shrink the image to cut the exchange count; (3) find out whether the ~134 s give-up is
+tunable or a lost response can be made to trigger a re-request.
+
+### Operational gotcha: the Z2M restore after a coordinator reflash
+
+Recorded because it will recur on the next reflash. After flashing `20250321`, Z2M crash-looped
+with `network commissioning timed out - most likely network with the same panId or extendedPanId
+already exists nearby`. The message is generic; the cause was in the herdsman debug log:
+
+```
+zh:adapter:zstack:manager: (stage-1) adapter is not configured / not commissioned
+zh:adapter:zstack:manager: (stage-2) configuration does not match backup
+zh:adapter:zstack:manager: determined startup strategy: startCommissioning
+```
+
+`coordinator_backup.json` had `"channel": 25` but **`"channel_mask": [11]`** -- a stale NV value
+from the old firmware -- and herdsman compares the *mask* with `configuration.yaml`'s
+`channel: 25`. The mismatch made it skip `restoreBackup` (which forms a throwaway random network
+first and cannot collide) and try to form a fresh network with the real PAN ID instead, which
+collided with the house's own routers. Setting `channel_mask` to `[25]` (nothing else) fixed it:
+the restore ran, and every device -- battery devices included -- came back without re-pairing.
+Check `channel_mask` against `channel` **before** reflashing next time.
+
 ### Root cause found: an aborted OTA can't be retried
 
 The ceiling's `INVALID_IMAGE` on retry (section 11) is explained by the Arduino library.
