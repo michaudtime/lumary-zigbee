@@ -27,6 +27,11 @@ static __NOINIT_ATTR OtaSnapshot s_ota_snapshot;
 static uint16_t s_prior_recoveries = 0;   // from a restored record, else 0
 static OtaWatch s_ota_watch;
 
+static bool s_restored = false;              // this boot restored an OTA snapshot
+// Set only around the library re-sync below, all on one task, so our light
+// callbacks ignore the library echoing back values we just gave it.
+static volatile bool s_suppress_light_callbacks = false;
+
 static void apply_effect(uint8_t index);
 static void publish_effect_attr();
 
@@ -185,6 +190,7 @@ static uint8_t s_ring_last_r = 255, s_ring_last_g = 255, s_ring_last_b = 255;
 // callback it needs. No RGB callback, and no rgb_to_cct fallback: the
 // coordinator can only express this endpoint's colour as mireds.
 static void on_downlight_change_temp(bool state, uint8_t level, uint16_t mireds) {
+    if (s_suppress_light_callbacks) return;
     s_state.down.on    = state;
     s_state.down.level = level;
     downlight_set_cct(&s_state.down, mireds);
@@ -201,6 +207,7 @@ static void on_downlight_change_temp(bool state, uint8_t level, uint16_t mireds)
 // CCT slider in Home Assistant. Both shims ignore the colour arguments: this
 // endpoint has no colour dice, so there is nothing there to act on.
 static void on_downlight_change_rgb(bool state, uint8_t /*r*/, uint8_t /*g*/, uint8_t /*b*/, uint8_t level) {
+    if (s_suppress_light_callbacks) return;
     s_state.down.on    = state;
     s_state.down.level = level;
 }
@@ -210,12 +217,14 @@ static void on_downlight_change_rgb(bool state, uint8_t /*r*/, uint8_t /*g*/, ui
 // ZigbeeColorDimmableLight.h). This mode is unreachable in practice, since the
 // downlight never advertises HUE_SATURATION, but it costs nothing to cover.
 static void on_downlight_change_hsv(bool state, uint8_t /*hue*/, uint8_t /*sat*/, uint8_t value) {
+    if (s_suppress_light_callbacks) return;
     s_state.down.on    = state;
     s_state.down.level = value;
 }
 
 // ── endpoint 2: the ring ──────────────────────────────────────────────────
 static void on_ring_change_rgb(bool state, uint8_t r, uint8_t g, uint8_t b, uint8_t level) {
+    if (s_suppress_light_callbacks) return;
     s_state.ring.on    = state;
     s_state.ring.level = level;
     if (!s_ring_color_seen || r != s_ring_last_r || g != s_ring_last_g || b != s_ring_last_b) {
@@ -243,6 +252,7 @@ static bool    s_ring_hsv_seen = false;
 static uint8_t s_ring_last_hue = 0, s_ring_last_sat = 0;
 
 static void on_ring_change_hsv(bool state, uint8_t hue, uint8_t sat, uint8_t value) {
+    if (s_suppress_light_callbacks) return;
     s_state.ring.on    = state;
     s_state.ring.level = value;
     if (!s_ring_hsv_seen || hue != s_ring_last_hue || sat != s_ring_last_sat) {
@@ -322,6 +332,21 @@ static void ota_recover(OtaRecoverReason reason, uint32_t offset) {
 void zigbee_light_init() {
     fixture_state_init(&s_state);
     s_state.ring.scene = scene_store_get_active();
+
+    // After an OTA recovery restart, put the light back as it was -- see
+    // ota_recover(). Only a software restart with a valid record qualifies; a
+    // power loss leaves garbage the checksum rejects. Invalidated on every boot
+    // either way, so a record can restore at most once.
+    if (esp_reset_reason() == ESP_RST_SW && ota_snapshot_valid(&s_ota_snapshot)) {
+        s_state            = s_ota_snapshot.state;
+        s_prior_recoveries = s_ota_snapshot.recoveries;
+        s_restored         = true;
+        log_w("Restored light state after OTA recovery #%u (%s at offset %lu)",
+              s_ota_snapshot.recoveries,
+              s_ota_snapshot.reason == OTA_RECOVER_STALL ? "stall" : "abort",
+              (unsigned long)s_ota_snapshot.offset);
+    }
+    ota_snapshot_invalidate(&s_ota_snapshot);
     ota_watch_init(&s_ota_watch);
 
     // ── endpoint 1: downlight ──
@@ -400,6 +425,18 @@ void zigbee_light_loop() {
         s_joined_once = true;
         s_down.requestOTAUpdate();
         log_i("Zigbee joined; OTA update requested");
+
+        // A restored fixture must bring the light library's private on/off and
+        // level copies into line, or an Off to a restored-on light is swallowed
+        // (zbAttributeSet only calls back on a change). Normal boots skip this.
+        if (s_restored) {
+            s_suppress_light_callbacks = true;
+            s_down.setLightLevel(s_state.down.level);
+            s_down.setLightState(s_state.down.on);
+            s_ring.setLightLevel(s_state.ring.level);
+            s_ring.setLightState(s_state.ring.on);
+            s_suppress_light_callbacks = false;
+        }
 
         // Tell the coordinator what we actually are, before anything asks. The
         // light boots off with the stored effect, and the effect attribute is
