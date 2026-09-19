@@ -196,15 +196,22 @@ topic:   zigbee2mqtt/bridge/request/device/ota_update/schedule
 payload: {"id": "Loft Overhead Light"}
 ```
 
-A scheduled update starts on the fixture's next image query (on every join, and hourly), and
-Zigbee2MQTT keeps it scheduled if it fails. Combined with the firmware's recovery this makes an
-update self-healing:
+The fixture queries for an image shortly after it joins the network at boot, then hourly. A
+scheduled update starts on whichever of those queries comes next, and Zigbee2MQTT keeps it
+scheduled if it fails. Combined with the firmware's recovery this makes an update self-healing:
 
 1. If a download aborts, or stalls for 3 minutes, the fixture saves its light state, restarts
-   (the light goes dark for about a second and comes back exactly as it was), and rejoins.
+   (the light blinks for about a second, then comes back as it was), and rejoins.
 2. On rejoin it queries for an image, and the still-scheduled update starts again from the
    beginning.
-3. When it succeeds, the fixture boots the new version and Zigbee2MQTT clears the schedule.
+3. When it succeeds, the fixture restarts into the new version and comes back **off** -- light
+   state is only carried across a recovery restart, not across the update's own restart -- and
+   Zigbee2MQTT clears the schedule.
+
+The restart itself backs off on repeated recoveries: the first two consecutive recoveries restart
+at once, but from the third the restart waits 5 minutes, doubling each time up to an hour, so an
+image that fails the same way every time cannot make a fixture blink every few seconds. It never
+stops retrying on its own -- `unschedule` is what stops it.
 
 The restart is required: the Arduino Zigbee library never resets its OTA state after an abort, so
 without it every retry fails `INVALID_IMAGE` two blocks in. To stop a fixture retrying an image that
