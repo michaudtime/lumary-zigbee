@@ -440,6 +440,16 @@ checks below are ticked only where they have been confirmed specifically.
       and whose failed update sometimes takes the radio with it, should not go somewhere that needs
       a ladder. The fixture itself is fine and fully usable on 2.0.1 throughout — the image only
       switches after a complete, verified download, so a failed attempt costs nothing but time.
+      **Update 2026-09-19:** the coordinator work of 2026-09-18 (firmware 20250321, USB 2.0
+      extension cable, transmit power 20) took bench OTA from ~25 to ~100-150 B/s. Firmware 2.1.0
+      now recovers from a failed OTA automatically; the bench verified a forced failure, a retry
+      nobody requested, and two complete updates
+      ([`ota-throughput.md`](../../research/ota-throughput.md), "2.1.0 bench verification"). The
+      loft's own 2.0.1 -> 2.0.2 attempt was power-cycled via the Inovelli's Smart Bulb Mode and
+      restarted 2026-09-18 23:27. It then failed at ~01:19 past 43%, slowed by eight Inovelli
+      switches updating at the same time. The cause was lost to Z2M's ~10-minute debug-log
+      rotation. **Still open:** the loft on 2.0.1 needs one more power cycle, then a scheduled
+      update to 2.1.0. From 2.1.0 on, a failed attempt retries by itself.
 
 ### Three sessions, three deaths, all in the same offset band
 
@@ -527,6 +537,14 @@ a fixture whose OTA is interrupted -- by a Z2M restart, a coordinator reboot, or
 mid-transfer -- cannot be recovered over the air at all. In a ceiling that means the breaker. Two
 firmware follow-ups fall out of this: reset the OTA state on abort so a retry works, and provide
 some remote reboot path. Both are strictly more valuable than making the transfer faster.
+
+**Resolved in 2.1.0.** The cause was confirmed in the library: the abort falls into `default:`
+without resetting anything. The fix is on our side: the firmware watches the OTA client's
+`ImageUpgradeStatus` and `FileOffset`. On an abort, or a 3-minute stall, it snapshots the light
+state into RAM that survives a software reset, restarts, and restores the state on boot. That
+restart is the remote reboot path. Retries come from Z2M's `ota_update/schedule`. For the bench
+proof, see [`ota-throughput.md`](../../research/ota-throughput.md), "2.1.0 bench verification". For
+the manual power cycle on fixtures older than 2.1.0, see the README.
 
 
 That last one also settles **design risk 2**: one OTA client registered on endpoint 1 while two

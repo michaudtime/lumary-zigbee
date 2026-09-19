@@ -266,6 +266,62 @@ reboot clears it. Consequences for our firmware:
 - A fix has to live on our side (a library patch is not under our control): e.g. detect an OTA that
   has gone quiet and reboot, since reboot is the only thing that resets the library's state.
 
+## 2.1.0 bench verification, 2026-09-19: automatic recovery works
+
+Firmware 2.1.0 implements that fix (design:
+[`docs/superpowers/specs/2026-09-18-ota-abort-recovery-design.md`](../superpowers/specs/2026-09-18-ota-abort-recovery-design.md)).
+Verified on Test Unit 2 (`0x744dbdfffe6d65c8`, USB-powered, logger attached), flashed over USB with
+the version temporarily labelled 2.0.9 so that Z2M would offer the 2.1.0 image. Capture:
+`build/ota-logs/recovery-bench.log` (first build) and `recovery-bench-final.log` (after the review
+fixes).
+
+**Forced failure.** Distinctive state set first: downlight on, level 60, 4000 K; ring running
+`chase`. Update started with `ota_update/schedule` at 01:40:25 (it began at once, because the board's
+post-flash image query landed in the same minute). Z2M was then stopped by hand:
+
+```
+01:49:12  OTA Client receives data: progress [82744/845318]   last block before Z2M stopped
+01:51:27  OTA status: 4                                        client gives up (ABORT), +135 s
+01:51:33  ota_recover(): OTA aborted at offset 4294967295 -- recovery #1, restarting
+01:51:33  rst:0xc (SW_CPU)
+01:51:34  Restored light state after OTA recovery #1 (abort at offset 4294967295)
+01:51:34  Published state: downlight on=1 level=60 / ring on=1 level=255 effect=4
+```
+
+Abort seen at the expected 135 s, the 5 s grace plus one sample, then restart and restore within a
+second. When Z2M came back (01:53:54), HA showed downlight on/60/4000 K and ring `chase` throughout:
+no flip. The schedule survived the restart (`"scheduledOta":{"downgrade":false}` in Z2M's
+`database.db`).
+
+The `4294967295` is a bug this run found: on abort the stack resets `FileOffset` to ZCL "none"
+(0xFFFFFFFF) before the status drops, and the first build logged the current sample. It now logs
+the watcher's last real in-download offset (`ota_watch_progress()`, commit 9129a0f).
+
+**Retry without anyone touching it.** No request was sent. The library re-queries on
+`OTA_UPGRADE_QUERY_INTERVAL`, which is 60 *minutes*, although its log line says "60 seconds". Its
+02:52:34 query found the still-scheduled update, and the download restarted from offset 0.
+
+**Completion clears the schedule.** 04:27:47 `OTA upgrade check status: ESP_OK`, then `OTA Finish`
+(version 0x02010000), then a software restart into 2.1.0, coming back **off**. That is the library's
+own restart; the record had already been invalidated at the previous boot, so nothing is restored,
+as the spec's non-goals say. Z2M: `Update of 0x744dbdfffe6d65c8 successful (5713 seconds)`, schedule
+cleared by 04:29:50, and a manual `ota_update/check` then returned `update_available: false`. That
+is 845 KB in 1 h 35 m, ~150 B/s.
+
+**Final build, second full update.** The final-review fixes were flashed the same way at 04:35:
+progress offset, restart backoff, ring sentinel seeding, and the white PWM configured before the
+USB wait (9129a0f, b884a46). This download was started with `ota_update/update`, because the
+board's first query landed before the schedule was set. It ran to completion 04:36:35 -> 06:15:36
+(1 h 39 m) with no abort, stall or recovery line at all, so there was no false trigger across
+~6,000 one-second samples. Z2M cleared the schedule at 06:17:44. The forced failure was **not**
+repeated on this build: the offset and sentinel fixes are covered by host tests and review only.
+
+**Still open:**
+
+- The USB-unplug negative check: a real power loss must boot with defaults.
+- What the light physically does during a recovery restart. Test Unit 2 has no LED load, so this
+  needs a mains fixture: the loft's first restart on 2.1.0.
+
 ## Next steps, in order
 
 Updated after the 2026-09-18 bench runs. Done: bench reproduction and timing (step 1 of the
@@ -283,8 +339,9 @@ original list); render starvation and CCA both refuted.
    with the board powered but *no USB host* (4.7 V input, or a charger-only USB supply), and
    capture what happens around 36-53 KB. The per-block `log_i` over an unconnected USB CDC is the
    leading suspect.
-4. **Make an interrupted OTA survivable** -- see the root cause above. A stalled-OTA watchdog that
-   reboots is the one fix fully under our control. This matters more than throughput.
+4. ~~**Make an interrupted OTA survivable**~~ -- **done in 2.1.0**, bench-verified 2026-09-19
+   (section above): an aborted or stalled OTA reboots the fixture with its light state restored, and
+   a Z2M scheduled update retries by itself.
 5. **Then the throughput levers**, measured one at a time against the baseline: shrink the image
    (`CORE_DEBUG_LEVEL=0` also removes the per-block log), then Z2M `image_block_response_delay`.
    The latter only speeds the ~10% of time spent in healthy exchanges until the losses are fixed.
