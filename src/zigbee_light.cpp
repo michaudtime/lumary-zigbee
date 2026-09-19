@@ -6,12 +6,26 @@
 #include <Arduino.h>
 #include <string.h>
 #include "Zigbee.h"
+#include "esp_attr.h"
+#include "esp_system.h"
+#include "ota_watch.h"
+#include "ota_snapshot.h"
 
 static FixtureState s_state;
 
 // Written on the Zigbee task, read on the Arduino render task. A single
 // aligned 32-bit word needs no mutex, but the volatile is load-bearing.
 static volatile uint32_t s_identify_until = 0;
+
+// OTA abort recovery -- see ota_watch.h and ota_snapshot.h.
+//
+// __NOINIT_ATTR: not zeroed at startup, so the record survives esp_restart()
+// (and holds garbage after a power loss, which ota_snapshot_valid() rejects).
+// Not RTC_NOINIT_ATTR, which esp_attr.h defines to nothing on targets without
+// RTC memory.
+static __NOINIT_ATTR OtaSnapshot s_ota_snapshot;
+static uint16_t s_prior_recoveries = 0;   // from a restored record, else 0
+static OtaWatch s_ota_watch;
 
 static void apply_effect(uint8_t index);
 static void publish_effect_attr();
@@ -271,9 +285,44 @@ static void on_custom_command(const esp_zb_zcl_custom_cluster_command_message_t*
     apply_effect(*(uint8_t*)message->data.value);
 }
 
+// Reads the OTA client cluster's ImageUpgradeStatus and FileOffset from
+// endpoint 1, where addOTAClient() put the client. Called on the Arduino loop
+// task, so the stack lock is required. Returns false (skip this sample) if the
+// lock is busy or either attribute is missing.
+static bool read_ota_client(uint8_t* status, uint32_t* offset) {
+    if (!esp_zb_lock_acquire(pdMS_TO_TICKS(50))) return false;
+    esp_zb_zcl_attr_t* st = esp_zb_zcl_get_attribute(DOWNLIGHT_ENDPOINT,
+        ESP_ZB_ZCL_CLUSTER_ID_OTA_UPGRADE, ESP_ZB_ZCL_CLUSTER_CLIENT_ROLE,
+        ESP_ZB_ZCL_ATTR_OTA_UPGRADE_IMAGE_STATUS_ID);
+    esp_zb_zcl_attr_t* off = esp_zb_zcl_get_attribute(DOWNLIGHT_ENDPOINT,
+        ESP_ZB_ZCL_CLUSTER_ID_OTA_UPGRADE, ESP_ZB_ZCL_CLUSTER_CLIENT_ROLE,
+        ESP_ZB_ZCL_ATTR_OTA_UPGRADE_FILE_OFFSET_ID);
+    const bool ok = st && off && st->data_p && off->data_p;
+    if (ok) {
+        *status = *(uint8_t*)st->data_p;
+        *offset = *(uint32_t*)off->data_p;
+    }
+    esp_zb_lock_release();
+    return ok;
+}
+
+// A failed download leaves the Arduino library's OTA parser mid-image (it only
+// resets on success), so every retry would fail INVALID_IMAGE until a restart.
+// Snapshot the light, restart, and let zigbee_light_init() put it back; the
+// next image query then retries a scheduled update from scratch.
+static void ota_recover(OtaRecoverReason reason, uint32_t offset) {
+    ota_snapshot_save(&s_ota_snapshot, &s_state, reason, offset, s_prior_recoveries);
+    log_w("OTA %s at offset %lu -- recovery #%u, restarting",
+          reason == OTA_RECOVER_STALL ? "stalled" : "aborted",
+          (unsigned long)offset, s_ota_snapshot.recoveries);
+    delay(100);   // let the log line out
+    esp_restart();
+}
+
 void zigbee_light_init() {
     fixture_state_init(&s_state);
     s_state.ring.scene = scene_store_get_active();
+    ota_watch_init(&s_ota_watch);
 
     // ── endpoint 1: downlight ──
     s_down.onLightChangeTemp(on_downlight_change_temp);
@@ -331,6 +380,19 @@ bool zigbee_light_connected() {
 }
 
 void zigbee_light_loop() {
+    // OTA abort/stall watch -- see ota_watch.h.
+    static uint32_t s_ota_sample_at = 0;
+    const uint32_t now = millis();
+    if (Zigbee.connected() && now - s_ota_sample_at >= OTA_WATCH_SAMPLE_MS) {
+        s_ota_sample_at = now;
+        uint8_t  status;
+        uint32_t offset;
+        if (read_ota_client(&status, &offset)) {
+            const OtaRecoverReason r = ota_watch_step(&s_ota_watch, status, offset, now);
+            if (r != OTA_RECOVER_NONE) ota_recover(r, offset);
+        }
+    }
+
     // The OTA query can only be issued once we're on a network. After this first
     // request the stack re-queries hourly on its own.
     static bool s_joined_once = false;
