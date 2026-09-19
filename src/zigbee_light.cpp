@@ -27,9 +27,21 @@ static __NOINIT_ATTR OtaSnapshot s_ota_snapshot;
 static uint16_t s_prior_recoveries = 0;   // from a restored record, else 0
 static OtaWatch s_ota_watch;
 
+// A recovery restart deferred by the backoff (see ota_recover_delay_ms() in
+// ota_watch.h and item B): set when ota_watch_step() fires but the delay for
+// this recovery number is non-zero, consumed once the delay has elapsed.
+static bool             s_recover_pending  = false;
+static OtaRecoverReason s_recover_reason;
+static uint32_t         s_recover_offset;
+static uint32_t         s_recover_since_ms;
+static uint32_t         s_recover_delay_ms;
+
 static bool s_restored = false;              // this boot restored an OTA snapshot
-// Set only around the library re-sync below, all on one task, so our light
-// callbacks ignore the library echoing back values we just gave it.
+// Set and cleared on the Arduino loop task, around the library re-sync below,
+// so our light callbacks ignore the library echoing back values we just gave
+// it. Read by those callbacks both there (the setters' synchronous echo, same
+// task) and on the Zigbee task (a real incoming command) -- which is why this
+// is volatile. A command landing in that millisecond window is dropped.
 static volatile bool s_suppress_light_callbacks = false;
 
 static void apply_effect(uint8_t index);
@@ -345,6 +357,23 @@ void zigbee_light_init() {
               s_ota_snapshot.recoveries,
               s_ota_snapshot.reason == OTA_RECOVER_STALL ? "stall" : "abort",
               (unsigned long)s_ota_snapshot.offset);
+
+        // The ring's library colour state is at its power-up default, not our
+        // restored one: ZigbeeColorDimmableLight's constructor sets
+        // _current_color = {255, 255, 255} and _current_hsv = {0, 0, 255} --
+        // i.e. hue 0 / sat 0 -- (ZigbeeColorDimmableLight.cpp lines 51-52).
+        // Seed our sentinels to match those defaults so the first On/Off/Level
+        // command after this restart compares equal to the library's actual
+        // colour instead of failing !s_ring_color_seen / !s_ring_hsv_seen and
+        // stomping the restored effect with ring_set_color(). Safe only here:
+        // Zigbee.begin() has not run yet, so no command can land first.
+        s_ring_color_seen = true;
+        s_ring_last_r     = 255;
+        s_ring_last_g     = 255;
+        s_ring_last_b     = 255;
+        s_ring_hsv_seen   = true;
+        s_ring_last_hue   = 0;
+        s_ring_last_sat   = 0;
     }
     ota_snapshot_invalidate(&s_ota_snapshot);
     ota_watch_init(&s_ota_watch);
@@ -414,8 +443,33 @@ void zigbee_light_loop() {
         uint32_t offset;
         if (read_ota_client(&status, &offset)) {
             const OtaRecoverReason r = ota_watch_step(&s_ota_watch, status, offset, now);
-            if (r != OTA_RECOVER_NONE) ota_recover(r, offset);
+            if (r != OTA_RECOVER_NONE) {
+                const uint16_t n     = uint16_t(s_prior_recoveries + 1);
+                const uint32_t delay = ota_recover_delay_ms(n);
+                if (delay == 0) {
+                    ota_recover(r, ota_watch_progress(&s_ota_watch));
+                } else {
+                    log_w("OTA %s at offset %lu -- recovery #%u deferred %lu s (backoff)",
+                          r == OTA_RECOVER_STALL ? "stalled" : "aborted",
+                          (unsigned long)ota_watch_progress(&s_ota_watch), n,
+                          (unsigned long)(delay / 1000));
+                    s_recover_pending  = true;
+                    s_recover_reason   = r;
+                    s_recover_offset   = ota_watch_progress(&s_ota_watch);
+                    s_recover_since_ms = now;
+                    s_recover_delay_ms = delay;
+                }
+            }
         }
+    }
+
+    // A deferred recovery restart -- see item B. Deliberately not gated on
+    // Zigbee.connected(): the watcher has already fired for this boot and
+    // won't again, so this is the only path left that still needs to run
+    // while we wait out the backoff.
+    if (s_recover_pending && now - s_recover_since_ms >= s_recover_delay_ms) {
+        s_recover_pending = false;
+        ota_recover(s_recover_reason, s_recover_offset);
     }
 
     // The OTA query can only be issued once we're on a network. After this first

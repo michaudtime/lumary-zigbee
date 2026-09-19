@@ -110,6 +110,88 @@ void test_stall_across_the_millis_wrap(void) {
     TEST_ASSERT_EQUAL_UINT32(t0 + 180000u, at);
 }
 
+// ── progress offset (item A) ────────────────────────────────────────────
+
+void test_progress_is_none_before_any_download(void) {
+    TEST_ASSERT_EQUAL_UINT32(OTA_FILE_OFFSET_NONE, ota_watch_progress(&w));
+}
+
+void test_abort_reports_last_real_offset(void) {
+    uint32_t now = 0;
+    // Status 1 at offsets 50, 100, ..., 2950, one second apart.
+    for (uint32_t off = 50; off <= 2950; off += 50) {
+        TEST_ASSERT_EQUAL(OTA_RECOVER_NONE, ota_watch_step(&w, OTA_IMAGE_STATUS_DOWNLOADING, off, now));
+        now += 1000;
+    }
+    // The stack resets FileOffset to NONE as the session ends, still status 1.
+    TEST_ASSERT_EQUAL(OTA_RECOVER_NONE,
+                      ota_watch_step(&w, OTA_IMAGE_STATUS_DOWNLOADING, OTA_FILE_OFFSET_NONE, now));
+    now += 1000;
+    const uint32_t status0_start = now;
+    // Then status 0 with offset NONE, every second, until the abort fires.
+    OtaRecoverReason r = OTA_RECOVER_NONE;
+    for (int i = 0; i < 10 && r == OTA_RECOVER_NONE; i++) {
+        r = ota_watch_step(&w, OTA_IMAGE_STATUS_NORMAL, OTA_FILE_OFFSET_NONE, now);
+        now += 1000;
+    }
+    TEST_ASSERT_EQUAL(OTA_RECOVER_ABORT, r);
+    TEST_ASSERT_EQUAL_UINT32(status0_start + 5000u, now - 1000u);
+    TEST_ASSERT_EQUAL_UINT32(2950u, ota_watch_progress(&w));
+}
+
+void test_stall_reports_stalled_offset(void) {
+    uint32_t off = 1234, at = 0;
+    TEST_ASSERT_EQUAL(OTA_RECOVER_STALL, feed(OTA_IMAGE_STATUS_DOWNLOADING, &off, 0, 0, 400, &at));
+    TEST_ASSERT_EQUAL_UINT32(180000, at);
+    TEST_ASSERT_EQUAL_UINT32(1234u, ota_watch_progress(&w));
+}
+
+// ── restart backoff (item B) ────────────────────────────────────────────
+
+void test_recover_delay_backoff(void) {
+    TEST_ASSERT_EQUAL_UINT32(0u,       ota_recover_delay_ms(0));
+    TEST_ASSERT_EQUAL_UINT32(0u,       ota_recover_delay_ms(1));
+    TEST_ASSERT_EQUAL_UINT32(0u,       ota_recover_delay_ms(2));
+    TEST_ASSERT_EQUAL_UINT32(300000u,  ota_recover_delay_ms(3));
+    TEST_ASSERT_EQUAL_UINT32(600000u,  ota_recover_delay_ms(4));
+    TEST_ASSERT_EQUAL_UINT32(1200000u, ota_recover_delay_ms(5));
+    TEST_ASSERT_EQUAL_UINT32(2400000u, ota_recover_delay_ms(6));
+    TEST_ASSERT_EQUAL_UINT32(3600000u, ota_recover_delay_ms(7));
+    TEST_ASSERT_EQUAL_UINT32(3600000u, ota_recover_delay_ms(8));
+    TEST_ASSERT_EQUAL_UINT32(3600000u, ota_recover_delay_ms(65535));
+}
+
+// ── grace restarts on a second dip (item G) ─────────────────────────────
+
+void test_second_dip_restarts_grace(void) {
+    uint32_t off = 0, now = 0;
+    // status 1 (advancing)
+    for (int i = 0; i < 10; i++) {
+        TEST_ASSERT_EQUAL(OTA_RECOVER_NONE, ota_watch_step(&w, OTA_IMAGE_STATUS_DOWNLOADING, off, now));
+        off += 50;
+        now += 1000;
+    }
+    // status 0 for 3 s: no fire
+    for (int i = 0; i < 3; i++) {
+        TEST_ASSERT_EQUAL(OTA_RECOVER_NONE, ota_watch_step(&w, OTA_IMAGE_STATUS_NORMAL, 0, now));
+        now += 1000;
+    }
+    // status 1 again (advancing): the session resumes
+    for (int i = 0; i < 10; i++) {
+        TEST_ASSERT_EQUAL(OTA_RECOVER_NONE, ota_watch_step(&w, OTA_IMAGE_STATUS_DOWNLOADING, off, now));
+        off += 50;
+        now += 1000;
+    }
+    // status 0 again: no fire at 4 s after this second dip, fires at 5 s after it
+    const uint32_t second_dip_start = now;
+    TEST_ASSERT_EQUAL(OTA_RECOVER_NONE, ota_watch_step(&w, OTA_IMAGE_STATUS_NORMAL, 0, now));                 // +0s
+    TEST_ASSERT_EQUAL(OTA_RECOVER_NONE, ota_watch_step(&w, OTA_IMAGE_STATUS_NORMAL, 0, second_dip_start + 1000));
+    TEST_ASSERT_EQUAL(OTA_RECOVER_NONE, ota_watch_step(&w, OTA_IMAGE_STATUS_NORMAL, 0, second_dip_start + 2000));
+    TEST_ASSERT_EQUAL(OTA_RECOVER_NONE, ota_watch_step(&w, OTA_IMAGE_STATUS_NORMAL, 0, second_dip_start + 3000));
+    TEST_ASSERT_EQUAL(OTA_RECOVER_NONE, ota_watch_step(&w, OTA_IMAGE_STATUS_NORMAL, 0, second_dip_start + 4000));
+    TEST_ASSERT_EQUAL(OTA_RECOVER_ABORT, ota_watch_step(&w, OTA_IMAGE_STATUS_NORMAL, 0, second_dip_start + 5000));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_idle_never_triggers);
@@ -124,5 +206,10 @@ int main(int, char**) {
     RUN_TEST(test_fires_only_once);
     RUN_TEST(test_abort_across_the_millis_wrap);
     RUN_TEST(test_stall_across_the_millis_wrap);
+    RUN_TEST(test_progress_is_none_before_any_download);
+    RUN_TEST(test_abort_reports_last_real_offset);
+    RUN_TEST(test_stall_reports_stalled_offset);
+    RUN_TEST(test_recover_delay_backoff);
+    RUN_TEST(test_second_dip_restarts_grace);
     return UNITY_END();
 }

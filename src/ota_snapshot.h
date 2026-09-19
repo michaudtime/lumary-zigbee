@@ -19,7 +19,7 @@ struct OtaSnapshot {
     uint8_t      version;
     uint8_t      reason;       // OtaRecoverReason
     uint16_t     recoveries;   // consecutive OTA recoveries, this one included
-    uint32_t     offset;       // FileOffset when recovery fired
+    uint32_t     offset;       // last FileOffset reached while downloading (OTA_FILE_OFFSET_NONE if none seen)
     FixtureState state;
     uint32_t     checksum;     // FNV-1a over every byte before this field
 };
