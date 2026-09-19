@@ -316,11 +316,16 @@ board's first query landed before the schedule was set. It ran to completion 04:
 ~6,000 one-second samples. Z2M cleared the schedule at 06:17:44. The forced failure was **not**
 repeated on this build: the offset and sentinel fixes are covered by host tests and review only.
 
-**Still open:**
+**Power loss (negative check), 08:50.** Test Unit 2's USB was unplugged for ~10 s and plugged back
+in. It booted cleanly, rejoined, and published off/off at 08:50:41, which are the defaults. This
+check does not tell much on its own: the board was already off before the unplug, and the logger
+reopened after the boot lines had gone by, so there is no `rst:` line or absent-`Restored` line to
+cite. The guarantee comes from the code: a restore needs `ESP_RST_SW` *and* a valid record, and a
+power-on reset is never `ESP_RST_SW`. A decisive version would unplug with the light on.
 
-- The USB-unplug negative check: a real power loss must boot with defaults.
-- What the light physically does during a recovery restart. Test Unit 2 has no LED load, so this
-  needs a mains fixture: the loft's first restart on 2.1.0.
+**Still open:** what the light physically does during a restart. Test Unit 2 has no LED load, so
+this needs a mains fixture. The loft's update to 2.1.0 (started 2026-09-19 07:05) ends in the same
+boot path.
 
 ## Next steps, in order
 
