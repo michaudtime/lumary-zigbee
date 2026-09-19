@@ -41,13 +41,19 @@ static CRGB leds[RING_NUM_LEDS];
 
 void setup() {
     Serial.begin(115200);
+    // Sets the white duty to 0 before the up-to-1 s USB wait below, so a
+    // restart on mains -- including an OTA recovery restart -- holds the
+    // downlight dark instead of letting the L-SD8E1 run it full on until the
+    // wait ends; only the ROM/bootloader window (~0.3 s) remains ungated.
+    // led_driver_init() only touches SPI2/LEDC GPIO config from config.h, so
+    // it needs nothing setup() would otherwise have done first.
+    led_driver_init();
+
     // Bounded, NOT `while (!Serial)`. The build sets ARDUINO_USB_CDC_ON_BOOT=1,
     // so Serial is the USB CDC and stays false until a host enumerates it -- an
     // unbounded wait means setup() never returns on a fixture running from mains
-    // with no USB attached. Nothing after this point runs: the white PWM GPIO is
-    // never configured, so the L-SD8E1 sees no gating and drives the downlight
-    // full on, and the radio never starts. Found on the bench 2026-08-18, on the
-    // first cold boot this board ever had without a PC attached.
+    // with no USB attached. Found on the bench 2026-08-18, on the first cold
+    // boot this board ever had without a PC attached.
     for (uint32_t t0 = millis(); !Serial && millis() - t0 < 1000; ) delay(10);
     Serial.println("boot ok");
 
@@ -69,7 +75,6 @@ void setup() {
     esp_task_wdt_add(nullptr);   // watch this task -- setup() and loop() both run on it
 
     scene_store_init();
-    led_driver_init();
     Serial.println("LED driver init ok");
 
 #if !BENCH_DEMO_MODE
