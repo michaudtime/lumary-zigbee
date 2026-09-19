@@ -9,9 +9,9 @@
 // twice, and README.md says so.
 
 #define FW_VERSION_MAJOR  2
-#define FW_VERSION_MINOR  0
-#define FW_VERSION_PATCH  2
-#define FW_DATE_CODE      "20260915"   // ZCL DateCode, YYYYMMDD
+#define FW_VERSION_MINOR  1
+#define FW_VERSION_PATCH  0
+#define FW_DATE_CODE      "20260919"   // ZCL DateCode, YYYYMMDD
 
 // The coordinator only offers images numbered above the running one.
 #define ZB_FW_VERSION     ((FW_VERSION_MAJOR << 24) | (FW_VERSION_MINOR << 16) | (FW_VERSION_PATCH << 8))

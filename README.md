@@ -187,6 +187,35 @@ for a fixture already in the ceiling: if Zigbee OTA cannot reach a light, the on
 physical access to the USB port. Getting Zigbee OTA verified from an installed location is
 consequently the gate on signing off the board (plan task 6.4), not a nice-to-have.
 
+### Scheduled updates and automatic recovery (2.1.0 and later)
+
+**Start updates with *schedule*, not *update*:**
+
+```
+topic:   zigbee2mqtt/bridge/request/device/ota_update/schedule
+payload: {"id": "Loft Overhead Light"}
+```
+
+A scheduled update starts on the fixture's next image query (on every join, and hourly), and
+Zigbee2MQTT keeps it scheduled if it fails. Combined with the firmware's recovery this makes an
+update self-healing:
+
+1. If a download aborts, or stalls for 3 minutes, the fixture saves its light state, restarts
+   (the light goes dark for about a second and comes back exactly as it was), and rejoins.
+2. On rejoin it queries for an image, and the still-scheduled update starts again from the
+   beginning.
+3. When it succeeds, the fixture boots the new version and Zigbee2MQTT clears the schedule.
+
+The restart is required: the Arduino Zigbee library never resets its OTA state after an abort, so
+without it every retry fails `INVALID_IMAGE` two blocks in. To stop a fixture retrying an image that
+can never succeed, send the same payload to `.../ota_update/unschedule`. Each recovery is logged on
+the serial console with a running count.
+
+**Fixtures on firmware older than 2.1.0** have no automatic recovery: after a failed update, power-
+cycle the fixture before retrying. From Home Assistant, via its Inovelli switch: turn the switch
+off, set its Smart Bulb Mode to `Disabled` (the switch is off, so the load loses power), wait ~15 s,
+then set Smart Bulb Mode back to `Smart Bulb Mode` (full power returns and the fixture boots).
+
 ### Building an OTA image
 
 The device registers an OTA client at startup and queries for an image once it
