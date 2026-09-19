@@ -110,6 +110,17 @@ defaults, then **invalidate the record immediately** so it can only be used once
 first-join one-shot in `zigbee_light_loop()` then publishes the restored on/off and level, so Home
 Assistant never sees the light flip.
 
+**The light library's own copies must be synced too** (found while planning). The Arduino
+`ZigbeeColorDimmableLight` keeps *private* `_current_state` / `_current_level`, and its
+`zbAttributeSet()` only calls our callbacks when a command *changes* them
+(`ZigbeeColorDimmableLight.cpp:139,149`). Left at their power-up defaults (off, 255) after a restore,
+an **Off command to a restored-on light would be swallowed** -- the library believes it is already
+off. So in the first-join one-shot, before publishing, a restored fixture calls the public
+`setLightLevel()` / `setLightState()` on both endpoints with our light callbacks suppressed by a
+flag: those setters update the private copies and the ZCL attributes, then call back synchronously,
+and the callback must not re-enter `FixtureState` (on the ring it could drop the restored effect).
+Normal boots skip this step entirely.
+
 The snapshot is used **only** after an OTA recovery restart. Any other reset -- power loss, brownout,
 watchdog, panic -- boots with today's defaults: a power loss leaves random RAM (the checksum
 rejects it), and other resets are not `ESP_RST_SW` or find the record already invalidated.
