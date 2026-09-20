@@ -427,8 +427,8 @@ device is assigned to the Loft area. First report: "everything is seeming good" 
 checks below are ticked only where they have been confirmed specifically.
 
 - [x] Unplug the stock board, plug the new one into the existing harnesses, power the real driver
-- [ ] Both light sources work in the fixture
-- [ ] Zigbee binding to the Inovelli works from the installed location
+- [x] Both light sources work in the fixture — confirmed in the ceiling 2026-09-19
+- [x] Zigbee binding to the Inovelli works from the installed location — confirmed 2026-09-19
 - [x] Link quality from the installed location: **LQI 126** (Z2M dashboard, 2026-09-15). Z2M reports
       LQI rather than RSSI, so the original "better than −70 dBm" criterion is recorded as LQI
       instead; 126/255 is a solid link. `sensor.loft_overhead_light_linkquality` is now enabled in

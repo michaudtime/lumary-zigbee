@@ -414,10 +414,13 @@ drives all three dice at brightness 200 — with no flicker or sag from the driv
 Still untested: **NVS scene storage**. The demo mode uses `kDefaultParams` directly and bypasses
 `scene_store` entirely, so saving and recalling scenes over Zigbee has never been exercised.
 
-### Task 6.4: In-fixture drop-in test — [USER] — STILL OPEN, unblocked 2026-08-18
+### Task 6.4: In-fixture drop-in test — [USER] — **PASS 2026-09-19, rev A signed off**
 
-- [ ] **Step 1:** Unplug the stock board, plug in the new board using the existing harnesses (no rewiring). Power the real driver. Expected: light works, both rings function.
-- [ ] **Step 2: Verify** RF range / Zigbee binding to the Inovelli switch and a Zigbee OTA test succeed from the installed location. PASS/FAIL → sign off rev A.
+- [x] **Step 1:** Unplug the stock board, plug in the new board using the existing harnesses (no rewiring). Power the real driver. Expected: light works, both rings function. — **PASS.** Installed in the loft ceiling 2026-09-15; both light sources confirmed working in the fixture 2026-09-19.
+- [x] **Step 2: Verify** RF range / Zigbee binding to the Inovelli switch and a Zigbee OTA test succeed from the installed location. PASS/FAIL → sign off rev A. — **PASS.** Binding to the Inovelli confirmed from the installed location 2026-09-19. LQI 126-138 throughout. The OTA leg took four days and drove the 2.1.0 recovery work: a real update completed from the ceiling 2026-09-19 11:46 (2.0.1 -> 2.1.0), on a scheduled retry that needed nobody. See section 11 of [`2026-08-18-bench-verification.md`](2026-08-18-bench-verification.md) and [`docs/research/ota-throughput.md`](../../research/ota-throughput.md).
+
+**Rev A is signed off for the remaining four boards**, with the two Task 6.3 caveats below still
+owed (neither blocks installation: one is a margin check, the other a measurement never taken).
 
 > **This task was silently blocked until 2026-08-18, and the block was invisible from the bench.**
 > `setup()` opened with an unbounded `while (!Serial) delay(10)`. The build sets
