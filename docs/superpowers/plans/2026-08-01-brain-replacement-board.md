@@ -440,8 +440,10 @@ owed (neither blocks installation: one is a margin check, the other a measuremen
 
 Two caveats carried from Task 6.3, both still open:
 
-- [ ] **Re-check thermals in the sealed can.** 6.3's numbers (Q2 at 37 °C, U2 at 40 °C) were open-air
+- [x] **Re-check thermals in the sealed can.** 6.3's numbers (Q2 at 37 °C, U2 at 40 °C) were open-air
       bench at 23 °C ambient. The deltas should hold; the absolute temperatures will not.
+      **Closed 2026-09-19 by observation:** the loft fixture has run sealed in the ceiling since
+      2026-09-15 with no thermal trouble. Nothing was metered, so there are still no in-can numbers.
 - [ ] **Meter the leg current in series.** Never actually measured — P0.5's `I_set` is still taken on
       trust from the driver's CC rating.
 

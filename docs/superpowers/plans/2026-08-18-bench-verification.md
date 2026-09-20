@@ -574,8 +574,11 @@ endpoints exist. The library's OTA support was written against single-endpoint e
 
 Two caveats carried from Task 6.3:
 
-- [ ] **Re-check thermals in the sealed can.** 6.3's numbers (Q2 at 37 °C, U2 at 40 °C) were
+- [x] **Re-check thermals in the sealed can.** 6.3's numbers (Q2 at 37 °C, U2 at 40 °C) were
       open-air bench at 23 °C ambient. The deltas should hold; the absolute temperatures will not.
+      **Closed 2026-09-19 by observation, not measurement:** the loft fixture has run sealed in the
+      ceiling since 2026-09-15 with no thermal trouble reported. No probe went in, so there are no
+      in-can numbers; if a rev B or a higher drive current is ever considered, measure then.
 - [ ] **Meter the leg current in series.** Never actually measured — P0.5's `I_set` is still taken on
       trust from the driver's CC rating.
 
