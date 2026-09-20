@@ -433,7 +433,11 @@ checks below are ticked only where they have been confirmed specifically.
       LQI rather than RSSI, so the original "better than −70 dBm" criterion is recorded as LQI
       instead; 126/255 is a solid link. `sensor.loft_overhead_light_linkquality` is now enabled in
       HA, so the value is recorded over time rather than spot-checked.
-- [ ] A real Zigbee OTA completes from the installed location — **FAILED 2026-09-16.** Three
+- [x] A real Zigbee OTA completes from the installed location — **PASSED 2026-09-19 11:46**, on
+      the fourth day of trying: 2.0.1 -> 2.1.0, reported back as `swBuildId 2.1.0` /
+      `dateCode 20260919`. It finished on a **scheduled** retry that nobody triggered and that
+      needed no power cycle (see the 2026-09-19 entry below), which is the workflow 2.1.0 is built
+      around. History kept below, because it is what the design came out of. **FAILED 2026-09-16.** Three
       attempts at 2.0.1 -> 2.0.2, none past ~6%; see below and
       [`docs/research/ota-throughput.md`](../../research/ota-throughput.md). **This gates flashing
       the other four rev A boards into ceilings**: a fixture that cannot be updated over the air,
@@ -460,9 +464,14 @@ checks below are ticked only where they have been confirmed specifically.
       answered every time, and the attempt aborted at 09:06:55. This is the "lost response"
       failure from `ota-throughput.md`, here sustained, and on the downlink only. Short
       coordinator frames still arrived (a Basic read and the image-query response), so the path
-      loses the large block responses, not everything. **Still open:** the loft stays on 2.0.1,
-      and the Z2M schedule stays set. The downlink to the loft needs looking at before another
-      attempt, each of which costs a power cycle until the loft runs 2.1.0.
+      loses the large block responses, not everything. Retrying by hand was stopped at 09:07 and
+      the Z2M schedule left in place. **It then finished by itself:** the fixture's own hourly
+      image query picked the still-scheduled update up, and by **11:46:34** the loft was running
+      2.1.0 (`swBuildId 2.1.0`, `dateCode 20260919`), schedule cleared by Z2M, LQI 138 afterwards.
+      No power cycle, no command. It worked on 2.0.1 because the 09:04 attempt received no block
+      at all, so the library's parser was never left mid-image — the stuck state needs a *partial*
+      transfer. The downlink losses are still unexplained and still worth a look: they cost two
+      hours of transfer at 72%.
 
 ### Three sessions, three deaths, all in the same offset band
 
