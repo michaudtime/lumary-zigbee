@@ -34,10 +34,15 @@ The external `L-SD8E1` driver supplies **36.63 V constant-current** (inner white
 > **Upgrading an already-paired fixture:** adding the second endpoint changes the device
 > descriptor, and Zigbee2MQTT caches endpoints from the interview, so an already-paired fixture
 > must be **re-interviewed** (Z2M frontend → device → Re-interview, or publish to
-> `zigbee2mqtt/bridge/request/device/interview`) before the ring entity works. This has not been
-> tested on hardware, so exactly what you'll see beforehand is unconfirmed either way -- expect
+> `zigbee2mqtt/bridge/request/device/interview`) before the ring entity works. This has never been
+> observed on hardware, so exactly what you'll see beforehand is unconfirmed either way -- expect
 > the ring entity to be missing entirely, or present but unresponsive, until the re-interview is
 > done. Newly paired fixtures just work.
+>
+> It is also no longer easy to check: both fixtures in service have already crossed this descriptor
+> change, and a fixture that has crossed it cannot show you the before. Settling it would mean
+> deliberately pairing a board on pre-2.0.0 firmware and upgrading it while watching -- worth doing
+> when the remaining rev A boards are brought up, or this hedge should simply stay as written.
 
 ### Wiring (rev A board)
 
@@ -419,8 +424,12 @@ node z2m/test/converter.test.mjs
 - [x] Task 8: Zigbee OTA
 - [ ] Task 9: BLE OTA fallback -- won't do (decided 2026-08-19); see "OTA Updates" above
 - [ ] Task 10: Integration + validation -- bench-verified end to end
-      (`docs/superpowers/plans/2026-08-18-bench-verification.md`, §§1-9); still open: the
-      already-paired-fixture upgrade path, and sign-off from an installed ceiling location
+      (`docs/superpowers/plans/2026-08-18-bench-verification.md`, §§1-9), and **signed off from an
+      installed ceiling location 2026-09-19**: binding to the Inovelli confirmed from the loft at
+      LQI 126-138, and a real over-the-air update completed from there (Task 6.4 in
+      `docs/superpowers/plans/2026-08-01-brain-replacement-board.md`). Still open: the
+      already-paired-fixture upgrade path -- see the note under "Two entities" above, which now
+      needs a fixture deliberately left on pre-2.0.0 firmware to observe at all
       (RSSI, thermals, a real OTA from there)
 
 ## License
