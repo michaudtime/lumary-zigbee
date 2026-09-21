@@ -3,6 +3,7 @@
 #include "scene_store.h"
 #include "effect_params.h"
 #include "identify.h"
+#include "ring_command.h"
 #include <Arduino.h>
 #include <string.h>
 #include "Zigbee.h"
@@ -183,19 +184,11 @@ static LumaryDownlight s_down(DOWNLIGHT_ENDPOINT);
 static LumaryRing      s_ring(RING_ENDPOINT);
 
 // The ring endpoint reports state, level and colour together on every change,
-// so the only way to tell a colour command from a plain dim is to compare
-// against the last colour we saw. Without this, nudging the brightness would
-// kick the ring out of whatever scene it was running.
-//
-// s_ring_color_seen guards the very first comparison: with no prior colour to
-// compare against, the sentinel values below would otherwise have to double as
-// "no colour yet", and 255/255/255 is itself a colour a coordinator can
-// legitimately send (plain white). Without this flag, a fixture whose first
-// colour command after boot happened to be white would compare equal to the
-// sentinel and be silently ignored -- the ring would stay on whatever scene it
-// booted into instead of switching to white as commanded.
-static bool    s_ring_color_seen = false;
-static uint8_t s_ring_last_r = 255, s_ring_last_g = 255, s_ring_last_b = 255;
+// so a plain dim arrives carrying a colour nobody asked for. ring_command.h
+// tells the two apart -- by the state/level change the library only ever
+// attaches to an On/Off or Level write, never to a colour one. Its header
+// carries the full reasoning, including why comparing colours cannot work.
+static RingSync s_ring_sync;
 
 // ── endpoint 1: the downlight ─────────────────────────────────────────────
 // Colour-temperature capability only, so this is the only light-change
@@ -237,16 +230,9 @@ static void on_downlight_change_hsv(bool state, uint8_t /*hue*/, uint8_t /*sat*/
 // ── endpoint 2: the ring ──────────────────────────────────────────────────
 static void on_ring_change_rgb(bool state, uint8_t r, uint8_t g, uint8_t b, uint8_t level) {
     if (s_suppress_light_callbacks) return;
-    s_state.ring.on    = state;
-    s_state.ring.level = level;
-    if (!s_ring_color_seen || r != s_ring_last_r || g != s_ring_last_g || b != s_ring_last_b) {
-        s_ring_color_seen = true;
-        s_ring_last_r = r;
-        s_ring_last_g = g;
-        s_ring_last_b = b;
-        const LightMode was = s_state.ring.mode;
-        ring_set_color(&s_state.ring, CRGB{r, g, b});   // moves out of scene mode
-        if (was == MODE_SCENE) publish_effect_attr();   // ...so stop naming one
+    // Returns true only when the ring left scene mode, so stop naming an effect.
+    if (ring_apply_rgb(&s_state.ring, &s_ring_sync, state, CRGB{r, g, b}, level)) {
+        publish_effect_attr();
     }
 }
 
@@ -257,25 +243,14 @@ static void on_ring_change_rgb(bool state, uint8_t r, uint8_t g, uint8_t b, uint
 // registered. RingState already stores hue/sat directly, so this sets them
 // without round-tripping through RGB the way on_ring_change_rgb has to.
 //
-// s_ring_hsv_seen guards the first comparison the same way s_ring_color_seen
-// does for the RGB path -- hue=0/sat=0 is itself a valid "white" command, not
-// just an unset sentinel.
-static bool    s_ring_hsv_seen = false;
-static uint8_t s_ring_last_hue = 0, s_ring_last_sat = 0;
-
+// Note this path is reachable for a NON-colour command too: a coordinator can
+// write the ColorMode attribute directly, latching the library into HSV with
+// its hue/sat still at the power-up default and no callback of its own -- after
+// which the next On/Off dispatches through here carrying hue 0 / sat 0.
 static void on_ring_change_hsv(bool state, uint8_t hue, uint8_t sat, uint8_t value) {
     if (s_suppress_light_callbacks) return;
-    s_state.ring.on    = state;
-    s_state.ring.level = value;
-    if (!s_ring_hsv_seen || hue != s_ring_last_hue || sat != s_ring_last_sat) {
-        s_ring_hsv_seen = true;
-        s_ring_last_hue = hue;
-        s_ring_last_sat = sat;
-        const LightMode was = s_state.ring.mode;
-        s_state.ring.hue  = hue;
-        s_state.ring.sat  = sat;
-        s_state.ring.mode = MODE_COLOR;                 // moves out of scene mode
-        if (was == MODE_SCENE) publish_effect_attr();   // ...so stop naming one
+    if (ring_apply_hsv(&s_state.ring, &s_ring_sync, state, hue, sat, value)) {
+        publish_effect_attr();
     }
 }
 
@@ -343,6 +318,7 @@ static void ota_recover(OtaRecoverReason reason, uint32_t offset) {
 
 void zigbee_light_init() {
     fixture_state_init(&s_state);
+    ring_sync_init(&s_ring_sync);
     s_state.ring.scene = scene_store_get_active();
 
     // After an OTA recovery restart, put the light back as it was -- see
@@ -357,23 +333,12 @@ void zigbee_light_init() {
               s_ota_snapshot.recoveries,
               s_ota_snapshot.reason == OTA_RECOVER_STALL ? "stall" : "abort",
               (unsigned long)s_ota_snapshot.offset);
-
-        // The ring's library colour state is at its power-up default, not our
-        // restored one: ZigbeeColorDimmableLight's constructor sets
-        // _current_color = {255, 255, 255} and _current_hsv = {0, 0, 255} --
-        // i.e. hue 0 / sat 0 -- (ZigbeeColorDimmableLight.cpp lines 51-52).
-        // Seed our sentinels to match those defaults so the first On/Off/Level
-        // command after this restart compares equal to the library's actual
-        // colour instead of failing !s_ring_color_seen / !s_ring_hsv_seen and
-        // stomping the restored effect with ring_set_color(). Safe only here:
-        // Zigbee.begin() has not run yet, so no command can land first.
-        s_ring_color_seen = true;
-        s_ring_last_r     = 255;
-        s_ring_last_g     = 255;
-        s_ring_last_b     = 255;
-        s_ring_hsv_seen   = true;
-        s_ring_last_hue   = 0;
-        s_ring_last_sat   = 0;
+        // No colour-sentinel seeding needed here any more: ring_command.h tells
+        // a colour command from an On/Off or Level one without consulting the
+        // colour at all, so the library sitting at its power-up default costs
+        // nothing. The state/level baseline is still seeded to the library's
+        // defaults above and moved to the restored values by the re-sync in
+        // zigbee_light_loop(), once Zigbee.begin() has actually joined.
     }
     ota_snapshot_invalidate(&s_ota_snapshot);
     ota_watch_init(&s_ota_watch);
@@ -490,6 +455,11 @@ void zigbee_light_loop() {
             s_ring.setLightLevel(s_state.ring.level);
             s_ring.setLightState(s_state.ring.on);
             s_suppress_light_callbacks = false;
+            // The library moved but never called back, so move the ring's
+            // baseline with it. Left at the boot defaults, a genuine colour
+            // command that happened to match them would read as an On/Off and
+            // be dropped instead of applied.
+            ring_sync_note(&s_ring_sync, s_state.ring.on, s_state.ring.level);
         }
 
         // Tell the coordinator what we actually are, before anything asks. The

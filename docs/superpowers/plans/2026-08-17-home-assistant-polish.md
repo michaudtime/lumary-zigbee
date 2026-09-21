@@ -319,6 +319,16 @@ what it is. This code path is in the untested Zigbee-adapter layer -- `light_sta
 cover `ring_set_color()` itself but not this dedup -- so nothing in the test suite would have caught
 it. Bench-verified working after the fix.
 
+> **Superseded 2026-09-21.** Those sentinels fixed the dropped-white case but left the mirror-image
+> one: with `s_ring_color_seen` false at boot, the *first* On/Off or Level command -- which the
+> library dispatches through the colour callback carrying its own power-up default -- read as a
+> colour change and stomped the booted scene with white. Both are gone now. The colour comparison
+> was only ever a proxy for "did a colour actually arrive", and the library answers that exactly:
+> `zbAttributeSet()` calls back on On/Off and Level *only when those changed*, and on every colour
+> write *without touching either*. `src/ring_command.h` tests state/level instead of colour, which
+> is exact in both directions and needs no sentinel. It also closes the gap this entry noted -- the
+> logic is now a pure header with host tests in `test/test_ring_command`, not untested adapter code.
+
 **Rollout needs two steps, not one, and this session proved it the hard way.** The updated converter
 must be installed in `data/external_converters/` and Z2M restarted *before* the re-interview means
 anything. With the old converter still loaded, Z2M ran the one-entity definition and HA showed a
