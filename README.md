@@ -196,6 +196,20 @@ topic:   zigbee2mqtt/bridge/request/device/ota_update/schedule
 payload: {"id": "Loft Overhead Light"}
 ```
 
+> **This means not using the Install button on Home Assistant's update card.** That button is the
+> `ota_update/update` path: Zigbee2MQTT pushes an image notify at the fixture and waits for it to
+> answer, which for a fixture a floor away from the coordinator typically ends in
+> `OTA update of '<name>' failed (Device didn't respond to OTA request)` — a failure that says
+> nothing about the image or the index. `schedule` parks the request instead and lets the fixture
+> collect it on its own next query, which is what the recovery loop below is built around. Seen
+> 2026-09-21 on the loft fixture: Install failed this way, the same image then installed from a
+> schedule.
+>
+> `check`, `update` and `schedule` share one per-device lock, so a `schedule` sent while either of
+> the others is still running is rejected with
+> `OTA update or check for update already in progress for '<name>'`. Wait for the first to finish
+> and send it again.
+
 The fixture queries for an image shortly after it joins the network at boot, then hourly. A
 scheduled update starts on whichever of those queries comes next, and Zigbee2MQTT keeps it
 scheduled if it fails. Combined with the firmware's recovery this makes an update self-healing:
