@@ -315,6 +315,15 @@ payload: {"id": "Overhead light test", "url": "ota/1001-0001-02000000-ota-file.z
 > version installs its toolchain via `idf_tools.py`, which aborts with
 > `ERROR: MSys/Mingw is not supported` under Git Bash. Building also needs
 > Windows long-path support enabled (`LongPathsEnabled = 1`).
+>
+> `--target upload` fails differently and much more confusingly under Git Bash:
+> esptool's progress bar is drawn with box-drawing characters, stdout falls back
+> to **cp1252**, and the whole upload dies on `UnicodeEncodeError: 'charmap'
+> codec can't encode characters` — after sitting silent for ~6 minutes, with the
+> traceback replacing whatever the real error was. The board is fine; nothing was
+> written. From PowerShell the same flash takes ~18 s. If you must run it from a
+> shell with a non-UTF-8 codepage, `chcp 65001` and `PYTHONIOENCODING=utf-8`
+> clear it (observed 2026-09-21).
 
 ```bash
 # Install PlatformIO CLI if needed
