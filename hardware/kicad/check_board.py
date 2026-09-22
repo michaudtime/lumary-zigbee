@@ -29,7 +29,7 @@ EXPECT = {
     "q3_pos": (51.5, 9.3375, 90.0),
     "power_nets": ["+36V", "+4V7", "+4V7_IN", "+3V3", "VBUS", "LDO_IN", "CW_RET", "WW_RET"],
     "min_power_width": 0.2,
-    # net -> (count, why). Segments that could not be widened, justified one by one.
+    # net -> (allowed_uuids, why). Segments with UUIDs in the list are allowed to be thin.
     "width_exceptions": {},
     "board_size": (63.3, 31.3),
     "j2_bom_keyword": "PicoBlade",
@@ -141,22 +141,31 @@ def check_board(rep):
     at_check("Q3", "q3_pos")
 
     widths = {}
+    uuids = {}
     for seg in kids(board, "segment"):
         n = first(seg, "net")
         if not n:
             continue
-        widths.setdefault(n[1], []).append(float(first(seg, "width")[1]))
+        net_name = n[-1]  # Handle both (net "NAME") and (net 3 "NAME")
+        u = first(seg, "uuid")
+        seg_uuid = u[1] if u else None
+        w = float(first(seg, "width")[1])
+        widths.setdefault(net_name, []).append(w)
+        if seg_uuid:
+            uuids.setdefault(net_name, []).append((w, seg_uuid))
     minw = EXPECT["min_power_width"]
     for net in EXPECT["power_nets"]:
         ws = widths.get(net, [])
         if not ws:
-            rep.note("%s: no routed segments (pour or unrouted)" % net)
+            rep.check(False, "%s: no routed segments" % net)
             continue
-        thin = [x for x in ws if x < minw - 1e-9]
-        allowed, why = EXPECT["width_exceptions"].get(net, (0, ""))
-        ok = len(thin) <= allowed
-        detail = "" if not thin else "  [%d thin, %d allowed%s]" % (
-            len(thin), allowed, ": " + why if why else "")
+        thin_segs = [(w, u) for w, u in uuids.get(net, []) if w < minw - 1e-9]
+        thin = [w for w in ws if w < minw - 1e-9]
+        allowed_uuids, why = EXPECT["width_exceptions"].get(net, ([], ""))
+        offending = [u for w, u in thin_segs if u not in allowed_uuids]
+        ok = len(offending) == 0
+        detail = "" if not offending else "  [offending: %s%s]" % (
+            ", ".join(offending), ": " + why if why else "")
         rep.check(ok, "%s: %d segs, min %.2f mm (need >= %s)%s"
                   % (net, len(ws), min(ws), minw, detail))
 
