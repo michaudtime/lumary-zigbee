@@ -37,11 +37,13 @@ Taken from `hardware/kicad/lumary-brain.kicad_pcb` on 2026-09-21, before any edi
 | ZH footprint courtyard (library) | 15.000 × 8.000 mm; x −7.5..+7.5, y −3.5..+4.5 in the footprint's own frame |
 | ZH signal pads | 1..7 at local x −4.5..+4.5 step 1.5, y −1.65, size 0.7 × 2.7; `MP` tabs at (±6.45, 2.05) |
 
-**Placement arithmetic (this plan's contribution over the spec).** The footprint's opening faces its own local +Y. KiCad rotation maps local +X → file +Y at rot 90, so **rot 270** is what turns the opening toward the board's +X (the rounded tip). At rot 270 the courtyard lands at `x = origin_x − 3.5 .. origin_x + 4.5` and `y = origin_y ± 7.5`.
+**Placement arithmetic (this plan's contribution over the spec).** The footprint's opening faces its own local +Y, and its pads sit at local y = −1.65.
+
+KiCad's placement transform, **verified against this board's own copper** rather than assumed — see "Pad geometry, resolved from the routing" below — is `file = (fx + px·cosθ + py·sinθ, fy − px·sinθ + py·cosθ)`. At **θ = 90** that sends local +Y to file +X, which is what turns the opening toward the board's +X (the rounded tip), and sends local +X to file −Y. The courtyard then lands at `x = origin_x − 3.5 .. origin_x + 4.5` and `y = origin_y ± 7.5`.
 
 Board right edge at height y is `x = 45.3 + sqrt(18² − (y − 15.65)²)`, i.e. **61.663 mm at y = 8.15 and y = 23.15** — the courtyard's corners. So `origin_x = 56.65` puts those corners 0.51 mm inside the outline, and the connector *body* (fab outline, ±6.75 × −2..+4) clears by ~1.3 mm.
 
-**J2 rev B: board-local (56.65, 15.65) rot 270 → file (174.257447, 96.75).** Courtyard x 53.15..61.15, y 8.15..23.15.
+**J2 rev B: board-local (56.65, 15.65) rot 90 → file (174.257447, 96.75).** Courtyard x 53.15..61.15, y 8.15..23.15. Pads sit 1.65 mm inboard of the origin, at board-local x = 55.00.
 
 **The spec's "nothing else moves" is wrong, and this plan corrects it.** Measured against that courtyard:
 
@@ -53,6 +55,21 @@ Board right edge at height y is `x = 45.3 + sqrt(18² − (y − 15.65)²)`, i.e
 | U3 | 53.15..56.55 × 3.41..7.51 | 0.64 mm — matches the spec's "~0.6 mm" note |
 
 Q3 cannot move far left: **D1's courtyard ends at x = 49.30** and the two overlap in y (7.41..7.95). Q3 left by 0.35 mm (to board-local 51.15) clears J2 by 0.30 mm and D1 by 0.15 mm. That is Task 2's default; Option B there is the fallback.
+
+### Pad geometry, resolved from the routing (2026-09-22)
+
+The rotation convention was not assumed — it was resolved by computing rev A's J2 pad positions under both candidate transforms and checking which one has the routed tracks landing on the pads. Under `file = (fx + px·cosθ + py·sinθ, fy − px·sinθ + py·cosθ)`, **five of five routable pads have a track endpoint 0.000 mm away**; under the opposite sign, one does (pad 1, which is invariant). The convention is settled.
+
+Rev A's J2 pads, board-local, all at x = 59.50:
+
+| pad | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|
+| net | `+36V` | `CW_RET` | `WW_RET` | `+4V7` | `GND` | `RING_DATA` | NC |
+| y | 19.00 | 17.75 | 16.50 | 15.25 | 14.00 | 12.75 | 11.50 |
+
+**This contradicts the spec and `phase0-measurements.md` P0.3/P0.6, and they are wrong.** The spec's §5 says "pad 7 is the pad nearest the board edge (4.8 mm) and pad 1 is 7.5 mm inboard", offering that as a self-checking assembly rule. Neither number appears in the geometry: pad 7 is 11.50 mm from the top edge and 3.32 mm from the curved right edge; pad 1 is 12.30 mm from the bottom edge and 3.49 mm from the curved edge. The ordering is also inverted — **pad 1 is the bottom-most pad, not pad 7**. Task 6 corrects those documents.
+
+The practical consequence is the opposite of a problem: pad 1 sits below the midline on rev A *and* on rev B, so the orientation carries over unchanged.
 
 ---
 
@@ -370,11 +387,13 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: `check_board.py --only board` from Task 1.
-- Produces: J2 at board-local (56.65, 15.65) rot 270 carrying the six nets; C1 at (51.40, 20.85) rot 90; Q3 at (51.15, 9.3375) rot 90. Tasks 3–7 assume these.
+- Produces: J2 at board-local (56.65, 15.65) rot 90 carrying the six nets; C1 at (51.40, 20.85) rot 90; Q3 at (51.15, 9.3375) rot 90. Tasks 3–7 assume these.
 
 - [ ] **Step 1: Settle pin 1's side against the physical harness — before any CAD**
 
-At rot 270, pad 1 sits at board-local y = 20.15 (**nearest the bottom edge**) and pad 7 at y = 11.15. Rev A was the other way round, so the old "empty slot goes to the edge-most pad" rule inverts: **on rev B the harness's empty position lands on pad 7, the top-most pad.**
+At rot 90, pad 1 sits at board-local y = 20.15 (**below the midline, toward the bottom edge**) and pad 7 at y = 11.15.
+
+**RESOLVED 2026-09-22 — no dry-fit needed.** The user photographed the working rev A board with its pigtail fitted: the black `V+` wire is at the bottom end of the connector. Rev A's pad 1 is at board-local y = 19.00, also below the midline (see "Pad geometry, resolved from the routing"), so black `V+` = pad 1 on a board known to work. Rev B keeps pad 1 at the bottom, so **the Global Constraints mapping stands unchanged: pad 1 = `+36V`**, and the harness's empty position lands on pad 7, the top-most pad.
 
 Dry-fit the purchased ZH 7-position connector against the stock harness and record which end the **black `V+` wire** occupies relative to the connector's keyed side. Write the answer into this step.
 
@@ -389,7 +408,7 @@ Edit `hardware/kicad/check_board.py`:
 
 ```python
     "j2_footprint": "Connector_JST:JST_ZH_S7B-ZR-SM4A-TF_1x07-1MP_P1.50mm_Horizontal",
-    "j2_pos": (56.65, 15.65, 270.0),
+    "j2_pos": (56.65, 15.65, 90.0),
     "c1_pos": (51.4, 20.85, 90.0),
     "q3_pos": (51.15, 9.3375, 90.0),
 ```
@@ -401,7 +420,7 @@ Run: `python hardware/kicad/check_board.py --only board`
 Expected: exit 1 with exactly four failures —
 ```
 FAIL  J2 footprint Connector_Molex:Molex_PicoBlade_53047-0710_1x07_P1.25mm_Vertical
-FAIL  J2 at board-local (59.5, 19.0, 90.0) (expect (56.65, 15.65, 270.0))
+FAIL  J2 at board-local (59.5, 19.0, 90.0) (expect (56.65, 15.65, 90.0))
 FAIL  C1 at board-local (53.4, 20.85, 90.0) (expect (51.4, 20.85, 90.0))
 FAIL  Q3 at board-local (51.5, 9.3375, 90.0) (expect (51.15, 9.3375, 90.0))
 ```
@@ -413,7 +432,7 @@ Open `pcbnew.exe` on `hardware/kicad/lumary-brain.kicad_pcb`. In file coordinate
 
 | Part | File X | File Y | Rotation |
 |---|---|---|---|
-| J2 | 174.257447 | 96.75 | 270 |
+| J2 | 174.257447 | 96.75 | 90 |
 | C1 | 169.007447 | 101.95 | 90 |
 | Q3 | 168.757447 | 90.4375 | 90 |
 
@@ -443,7 +462,7 @@ git commit -m "fix: J2 becomes a JST ZH 1.5mm side-entry connector
 
 The stock CN1 harness is JST ZH 1.5mm 7-position; rev A's PicoBlade 1.25mm J2
 never mated with it. Swaps the footprint to S7B-ZR-SM4A-TF and places it at
-board-local (56.65, 15.65) rot 270 -- on the Y midline at the rounded tip,
+board-local (56.65, 15.65) rot 90 -- on the Y midline at the rounded tip,
 where the 18mm arc is widest, opening facing the board edge like the stock
 board does.
 
@@ -604,7 +623,7 @@ In `hardware/kicad/build_board.py`:
 ```
 
 ```python
- "J2":(56.65, 15.65, 270.0),
+ "J2":(56.65, 15.65, 90.0),
 ```
 
 ```python
@@ -770,7 +789,7 @@ PY
 grep -E "^(J2|C1)," hardware/kicad/cpl.csv
 ```
 
-Expected: `J2,174.2574mm,-96.7500mm,Top,…` and `C1,169.0074mm,-101.9500mm,Top,90.000000`, matching Task 2's table. J2's rotation reads either `270.000000` or `-90.000000` — KiCad normalises the angle on entry and both mean the same placement (`check_board.py` compares modulo 360, which is why it accepts either). If the X values still read `177.1074` / `171.0074`, the export ran against a stale file.
+Expected: `J2,174.2574mm,-96.7500mm,Top,…` and `C1,169.0074mm,-101.9500mm,Top,90.000000`, matching Task 2's table. J2's rotation reads `90.000000`. If the X values still read `177.1074` / `171.0074`, the export ran against a stale file.
 
 - [ ] **Step 3: Regenerate the gerbers and drill files**
 
