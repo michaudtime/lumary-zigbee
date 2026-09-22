@@ -8,6 +8,12 @@ netlist in ../schematic-nets.md. Run with KiCad 10's bundled Python:
 Produces: lumary-brain.kicad_pcb  (all footprints placed + every net assigned +
 board outline). Routing is done by hand in KiCad afterwards.
 """
+# WARNING -- DO NOT RUN THIS AGAINST THE REAL BOARD.
+# board.Save() below is unconditional and this script also overwrites
+# lumary-brain.kicad_pro. lumary-brain.kicad_pcb is hand-routed and is the
+# artifact of record; re-running this destroys every track. The tables below
+# are kept in sync with the board by hand -- hardware/kicad/check_board.py
+# fails if they drift. To seed a *new* board, copy this script and change OUT.
 import os, sys
 import pcbnew
 
@@ -15,12 +21,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 OUT  = os.path.join(HERE, "lumary-brain.kicad_pcb")
 FPBASE = r"C:/Program Files/KiCad/10.0/share/kicad/footprints"
 
-BOARD_W, BOARD_H = 63.3, 31.3   # mm
+BOARD_W, BOARD_H = 62.3, 30.3   # mm
 # Ends are single 18mm-radius arcs (case corner rounding, user-measured): each end
 # bulges sagitta = R - sqrt(R^2-(H/2)^2) ~= 9.1mm deep -> ~45mm straight section
 # (matches user's "about 44mm square portion").
 import math as _math
-END_R  = 18.0
+END_R  = 17.5
 SAG    = END_R - _math.sqrt(END_R**2 - (BOARD_H/2)**2)   # ~9.11 mm
 
 def mm(v): return pcbnew.FromMM(v)
@@ -40,7 +46,7 @@ COMPONENTS = {
  "D2": ("Diode_SMD","D_SOD-123","B5819W"),
  "D3": ("Diode_SMD","D_SMA","SMAJ5.0A"),
  "J1": ("Connector_JST","JST_PH_S3B-PH-K_1x03_P2.00mm_Horizontal","PWR_IN"),
- "J2": ("Connector_Molex","Molex_PicoBlade_53047-0710_1x07_P1.25mm_Vertical","CN1"),
+ "J2": ("Connector_JST","JST_ZH_S7B-ZR-SM4A-TF_1x07-1MP_P1.50mm_Horizontal","CN1"),
  "J3": ("Connector_USB","USB_C_Receptacle_HRO_TYPE-C-31-M-12","USB-C"),
  "SW1":("Button_Switch_SMD","Panasonic_EVQPUJ_EVQPUA","BOOT"),
  "SW2":("Button_Switch_SMD","Panasonic_EVQPUJ_EVQPUA","EN"),
@@ -79,15 +85,15 @@ POS = {
  # USB right-of-center bottom w/ ESD+CC hugging it, buffer top-right by J2.
  "U1":(19.8, 8.3, 90.0),
  "J1":(23.85, 23.6, -90.0),
- "J2":(59.5, 19.0, 90.0),
+ "J2":(56.15, 15.15, 90.0),
  "J3":(41.93, 25.95, 0.0),
  "Q1":(37.35, 12.66, 90.0),
  "Q2":(42.2, 8.54, 90.0),
- "Q3":(51.5, 9.34, 90.0),
+ "Q3":(50.65, 8.8375, 90.0),
  "D1":(46.95, 6.8, 0.0),
  "D2":(41.55, 5.2, 0.0),
  "D3":(21.6, 19.05, 0.0),
- "C1":(53.4, 20.85, 90.0),
+ "C1":(50.8926, 20.45, 90.0),
  "SW1":(31.12, 20.3, 0.0),
  "SW2":(31.12, 26.3, 0.0),
  "U2":(36.75, 4.44, 90.0),
