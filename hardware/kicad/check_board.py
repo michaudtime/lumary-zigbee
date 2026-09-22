@@ -28,11 +28,39 @@ EXPECT = {
     "c1_pos": (50.8926, 20.45, 90.0),
     "q3_pos": (50.65, 8.8375, 90.0),
     "power_nets": ["+36V", "+4V7", "+4V7_IN", "+3V3", "VBUS", "LDO_IN", "CW_RET", "WW_RET"],
-    "min_power_width": 0.2,
-    # net -> (allowed_uuids, why). Segments with UUIDs in the list are allowed to be thin.
-    "width_exceptions": {},
+    # Per-net minimum track width. +4V7/+4V7_IN are on the 0.5mm Power net class;
+    # every other net in power_nets is on 0.2mm Default -- +36V/CW_RET/WW_RET
+    # carry a fixed 380 mA from the constant-current driver and +3V3/VBUS/LDO_IN
+    # draw ~0.2 A, all comfortably under the 0.74 A a 0.2mm/1oz trace supports at
+    # a 10C rise. Nets not listed here fall back to "default_min_width".
+    "min_widths": {"+4V7": 0.5, "+4V7_IN": 0.5},
+    "default_min_width": 0.2,
+    # net -> (allowed_uuids, why). Segments with UUIDs in the list are allowed to
+    # stay thin. These are the three necks that could not be widened without
+    # rerouting RING_BUF_OUT out of the corridor it shares with the +4V7
+    # diagonal and Q2's ground pad (~0.50mm wide there; a 0.2mm track with
+    # 0.2mm clearance either side needs 0.60mm). The reroute was offered and
+    # declined for now, so the path's IPC limit stays ~0.74 A -- the widening
+    # buys lower resistance (~60 m ohm, ~35 mV at the 0.55 A actual draw), not
+    # a higher current limit.
+    "width_exceptions": {
+        "+4V7": (
+            [
+                "093f2bea-3ab4-4dff-b0e2-51206501ee48",  # 3.960mm, past C7's GND pad / RING_BUF_OUT
+                "42b96ee6-5c65-4627-a6d6-a193a0d3b025",  # 0.760mm, same pinch
+            ],
+            "neck past C7's GND pad / RING_BUF_OUT -- corridor too narrow for 0.5mm without rerouting RING_BUF_OUT",
+        ),
+        "+4V7_IN": (
+            [
+                "d1f966ed-de48-4950-b8fd-b16de4800a93",  # 1.500mm, past J3's shield pad
+            ],
+            "neck past J3's shield pad -- same corridor-width constraint",
+        ),
+    },
     "board_size": (62.3, 30.3),
     "j2_bom_keyword": "ZH 1.5mm",
+    "copper_layers": 2,
 }
 TOL = 0.02
 TOKEN = re.compile(r'"(?:[^"\\]|\\.)*"|[()]|[^\s()]+')
@@ -153,14 +181,13 @@ def check_board(rep):
         widths.setdefault(net_name, []).append(w)
         if seg_uuid:
             uuids.setdefault(net_name, []).append((w, seg_uuid))
-    minw = EXPECT["min_power_width"]
     for net in EXPECT["power_nets"]:
         ws = widths.get(net, [])
         if not ws:
             rep.check(False, "%s: no routed segments" % net)
             continue
+        minw = EXPECT["min_widths"].get(net, EXPECT["default_min_width"])
         thin_segs = [(w, u) for w, u in uuids.get(net, []) if w < minw - 1e-9]
-        thin = [w for w in ws if w < minw - 1e-9]
         allowed_uuids, why = EXPECT["width_exceptions"].get(net, ([], ""))
         offending = [u for w, u in thin_segs if u not in allowed_uuids]
         ok = len(offending) == 0
@@ -168,6 +195,12 @@ def check_board(rep):
             ", ".join(offending), ": " + why if why else "")
         rep.check(ok, "%s: %d segs, min %.2f mm (need >= %s)%s"
                   % (net, len(ws), min(ws), minw, detail))
+
+    cu_layers = [l for l in first(board, "layers")
+                 if isinstance(l, list) and len(l) > 2 and l[-1] == "signal"]
+    rep.check(len(cu_layers) == EXPECT["copper_layers"],
+              "copper layers = %d %s (expect %d)"
+              % (len(cu_layers), [l[1] for l in cu_layers], EXPECT["copper_layers"]))
 
 
 def literal(src, name):

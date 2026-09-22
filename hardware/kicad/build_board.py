@@ -155,7 +155,7 @@ N("RING_DATA", ("R5","2"),("J2","6"))
 # ==========================================================================
 def main():
     board = pcbnew.NewBoard(OUT)
-    board.SetCopperLayerCount(4)
+    board.SetCopperLayerCount(2)
 
     # create nets
     nets = {}
@@ -262,7 +262,7 @@ def main():
                 ka.SetDoNotAllowTracks(False); ka.SetDoNotAllowVias(False)
                 ka.SetDoNotAllowPads(False);   ka.SetDoNotAllowFootprints(False)
                 ls = pcbnew.LSET(); [ls.AddLayer(l) for l in
-                     (pcbnew.F_Cu, pcbnew.In1_Cu, pcbnew.In2_Cu, pcbnew.B_Cu)]
+                     (pcbnew.F_Cu, pcbnew.B_Cu)]
                 ka.SetLayerSet(ls)
                 o = ka.Outline().NewOutline()
                 c = pad.GetPosition()
@@ -270,9 +270,11 @@ def main():
                     ka.Outline().Append(int(c.x+dx), int(c.y+dy), o)
                 board.Add(ka)
 
-    # GND zones: pours on F/B + solid planes on both inner layers, following the
-    # rounded outline inset 0.6mm (arcs polygonised). The module's antenna
-    # rule-area keeps copper out of the antenna region.
+    # GND zones: pours on F.Cu and B.Cu (the only two copper layers -- rev B
+    # dropped In1.Cu/In2.Cu, which carried no routing, only ground pours that
+    # duplicated F/B), following the rounded outline inset 0.6mm (arcs
+    # polygonised). The module's antenna rule-area keeps copper out of the
+    # antenna region.
     INSET = 0.6
     def zone_pts():
         # radial inset: end arcs shrink to radius END_R-INSET about the same centers
@@ -284,7 +286,7 @@ def main():
         for y in reversed(ys):  pts.append((W - xli(y), y))          # right arc, bottom→top
         return pts
     ZPTS = zone_pts()
-    for layer in (pcbnew.F_Cu, pcbnew.In1_Cu, pcbnew.In2_Cu, pcbnew.B_Cu):
+    for layer in (pcbnew.F_Cu, pcbnew.B_Cu):
         z = pcbnew.ZONE(board)
         z.SetLayer(layer)
         z.SetNet(nets["GND"])
@@ -313,12 +315,20 @@ def main():
                 "diff_pair_width":0.2,"line_style":0,"microvia_diameter":0.3,
                 "microvia_drill":0.1,"wire_width":6,
                 "pcb_color":"rgba(0, 0, 0, 0.000)","schematic_color":"rgba(0, 0, 0, 0.000)"}
-    POWER_NETS = ["+36V","+4V7","+4V7_IN","+3V3","VBUS","LDO_IN","CW_RET","WW_RET"]
+    # Only +4V7 and +4V7_IN get the wider 0.5mm Power class. The other six nets
+    # that carry meaningful power (+36V, CW_RET, WW_RET at 380 mA fixed by the
+    # constant-current driver; +3V3, VBUS, LDO_IN at ~0.2 A module draw) all sit
+    # comfortably under the 0.74 A a 0.2 mm/1oz trace supports at a 10C rise, so
+    # they stay on Default. Putting all eight in Power was tried and caused 25 of
+    # 28 DRC clearance violations -- rev B reverted those six back to 0.2 mm.
+    POWER_NETS = ["+4V7", "+4V7_IN"]
     data = {
       "board": {"design_settings": {"defaults": {}}},
       "meta": {"filename": "lumary-brain.kicad_pro", "version": 3},
       "net_settings": {
-        "classes": [nc("Default",0.25,0.6,0.3,0.2), nc("Power",0.5,0.8,0.4,0.2)],
+        # Default track width matches the project file (lumary-brain.kicad_pro),
+        # which is 0.2mm, not the 0.25mm this script previously wrote.
+        "classes": [nc("Default",0.2,0.6,0.3,0.2), nc("Power",0.5,0.8,0.4,0.2)],
         "meta": {"version": 4},
         "net_colors": None,
         "netclass_assignments": None,

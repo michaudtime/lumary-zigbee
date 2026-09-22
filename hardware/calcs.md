@@ -28,8 +28,14 @@ Rails: `+36V` = 36.63 V constant-current (380 mA), `+4V7` = 4.7 V logic/ring, `G
     The per-pixel 3535 estimate is **confirmed to within 3%**.
   - → full white at the current cap of 24: **~0.15 A**, not the ~0.55 A previously assumed.
   - **Implication:** against the 0.74 A trace limit the cap could rise to roughly 100 on paper.
-    Not acted on — the measurement is open-air, the fixture is a sealed can, and rev B should
-    fix the trace width rather than spend the margin. Revisit after plan Task 6.4.
+    Not acted on — the measurement is open-air, the fixture is a sealed can, and the driver's
+    `+4V7` rail spare capacity is still unmeasured (see R3 above). Revisit after plan Task 6.4.
+  - **Rev B update:** `+4V7`/`+4V7_IN` were widened to 0.5 mm where the layout allowed it (see
+    "As-built trace widths (rev B)" below), but three short necks could not be widened without a
+    reroute and stay at 0.2 mm. **A path is limited by its narrowest section, so the ring supply's
+    trace limit is still ~0.74 A — the widening did not raise it.** It bought lower resistance
+    (~60 mΩ, ~35 mV at the 0.55 A the path actually draws), not headroom, and it does **not**
+    change this brightness-cap discussion: the 0.74 A ceiling above is unchanged.
 
 ### Inner white sink (from P0.5)
 - Headroom ≈ 0.6 V, sink current 380 mA → **≈ 0.23 W per channel**, one color full at a time.
@@ -228,8 +234,52 @@ rev A, not just a USB-bench convenience. The ceiling that keeps `+4V7_IN` inside
 10 °C rise is about **37**; it is currently set to 24, which leaves comfortable margin.
 Do not raise it toward 255 on a rev A board.
 
-**Rev B fix:** widen `+4V7`/`+4V7_IN` to 0.5 mm (or pour them). The white path can stay
-at 0.2 mm — 380 mA is fixed by the constant-current driver and barely warms the copper.
+**Rev B fix (done, see below):** `+4V7`/`+4V7_IN` were widened to 0.5 mm where the layout
+allowed it; three short necks could not be widened and stay at 0.2 mm. The white path
+(`+36V`, `CW_RET`, `WW_RET`) stayed at 0.2 mm as planned — 380 mA is fixed by the
+constant-current driver and barely warms the copper.
+
+## As-built trace widths (rev B) — final state
+
+Of the eight power nets, only `+4V7` and `+4V7_IN` ended up wide. `+36V`, `CW_RET` and `WW_RET`
+carry a fixed 380 mA from the constant-current driver, and `+3V3`, `VBUS`, `LDO_IN` are module
+rails drawing ~0.2 A — all six sit comfortably inside the 0.74 A a 0.2 mm/1oz trace supports at a
+10 °C rise. Widening them anyway (putting all eight in the `Power` net class) caused 25 of 28 DRC
+clearance violations on this dense a board, so those six were reverted to 0.2 mm.
+
+| Net | Width / length | Width / length |
+|---|---|---|
+| `+4V7` | 0.50 mm / 19.9 mm | 0.20 mm / 4.7 mm |
+| `+4V7_IN` | 0.50 mm / 43.0 mm | 0.20 mm / 1.5 mm |
+| `+36V` | 0.20 mm / 36.5 mm | — |
+| `CW_RET` | 0.20 mm / 20.5 mm | — |
+| `WW_RET` | 0.20 mm / 19.9 mm | — |
+| `+3V3` | 0.20 mm / 37.3 mm | — |
+| `VBUS` | 0.20 mm / 44.2 mm | — |
+| `LDO_IN` | 0.20 mm / 14.3 mm | — |
+
+**Three necks remain at 0.2 mm** on the two wide nets, by segment uuid:
+
+| Net | uuid | Length | Where |
+|---|---|---|---|
+| `+4V7` | `093f2bea-3ab4-4dff-b0e2-51206501ee48` | 3.960 mm | past C7's GND pad / `RING_BUF_OUT` |
+| `+4V7` | `42b96ee6-5c65-4627-a6d6-a193a0d3b025` | 0.760 mm | same pinch |
+| `+4V7_IN` | `d1f966ed-de48-4950-b8fd-b16de4800a93` | 1.500 mm | past J3's shield pad |
+
+**The honest consequence: the ring supply path's IPC limit is still ~0.74 A. The widening did NOT
+raise it** — a path is limited by its narrowest section, and these three necks are still 0.2 mm.
+What it did buy is roughly 60 mΩ less resistance, about 35 mV at the 0.55 A the path actually
+draws (`+4V7_IN` at today's brightness cap: 0.35 A ring + 0.2 A module, the 550 mA row in the rev
+A table above). 0.74 A remains comfortably above that 0.55 A draw — the same margin rev A had.
+
+The necks cannot be widened without rerouting `RING_BUF_OUT` out of that corner: it threads
+between the `+4V7` diagonal and Q2's ground pad through a corridor ~0.50 mm wide, where a 0.2 mm
+track with 0.2 mm clearance either side needs 0.60 mm. That reroute was offered and declined for
+now — revisit if the 0.74 A ceiling ever needs to move.
+
+**This does not raise the brightness cap.** `J2`'s contacts are rated 1 A each, and the driver's
+`+4V7` rail spare capacity has never been measured (see "Open numeric items" below) — neither of
+those changed with this widening, and the trace was never the only constraint in the first place.
 
 ---
 
