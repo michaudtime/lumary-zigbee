@@ -14,7 +14,7 @@
 
 - **J2 footprint:** `Connector_JST:JST_ZH_S7B-ZR-SM4A-TF_1x07-1MP_P1.50mm_Horizontal` (side entry, SMT, ships in stock KiCad 10).
 - **J2 pad → net (from spec §3.1, unchanged from `hardware/schematic-nets.md` §2.5):** 1=`+36V` (V+), 2=`CW_RET` (CW−), 3=`WW_RET` (WW−), 4=`+4V7` (5V+), 5=`GND`, 6=`RING_DATA` (DIM), 7=NC. The two `MP` mounting tabs carry no net.
-- **Board outline is unchanged:** 63.3 × 31.3 mm with 18 mm-radius ends. Any task that moves an Edge.Cuts shape has gone wrong.
+- **Board outline (CHANGED 2026-09-22):** **62.3 × 30.3 mm**, end arcs **R = 17.5** about unchanged centres (file x 135.607447 and 162.907447, y 96.75), straight edges at file y 81.6 and 111.9. This is a deliberate 0.5 mm-per-side inset, taken because rev A fits the housing too tightly; it was NOT part of the original spec, which called the outline unchanged. Nothing else moved. **Board-local coordinates therefore shifted by −0.5 in both axes** — the checker derives its origin from the outline bbox, so every part reads 0.5 mm lower in x and y than it did before, without having moved.
 - **Power nets to 0.5 mm:** `+36V`, `+4V7`, `+4V7_IN`, `+3V3`, `VBUS`, `LDO_IN`, `CW_RET`, `WW_RET`. `GND` is a pour with no segments — nothing to do.
 - **Never run `build_board.py` against the real board.** Its `board.Save(OUT)` is unconditional and it also overwrites `lumary-brain.kicad_pro`; re-running it destroys every hand-routed track. The `.kicad_pcb` is the artifact of record.
 - **J2 stays hand-fit** — no LCSC number, `VERIFY` status, matching `C1`, `C2`, `Q1`, `Q2`, `SW1`, `SW2`. The user already has ZH parts in hand.
@@ -44,6 +44,8 @@ KiCad's placement transform, **verified against this board's own copper** rather
 Board right edge at height y is `x = 45.3 + sqrt(18² − (y − 15.65)²)`, i.e. **61.663 mm at y = 8.15 and y = 23.15** — the courtyard's corners. So `origin_x = 56.65` puts those corners 0.51 mm inside the outline, and the connector *body* (fab outline, ±6.75 × −2..+4) clears by ~1.3 mm.
 
 **J2 rev B: board-local (56.65, 15.65) rot 90 → file (174.257447, 96.75).** Courtyard x 53.15..61.15, y 8.15..23.15. Pads sit 1.65 mm inboard of the origin, at board-local x = 55.00.
+
+> Those board-local figures are **pre-shrink**. The file coordinates below are the ones to type and have not changed; after the 2026-09-22 outline inset, the same placement reads as board-local (56.15, 15.15) because the origin moved. Post-shrink clearances: J2 copper 1.534 mm to the edge, courtyard +0.071 mm.
 
 **The spec's "nothing else moves" is wrong, and this plan corrects it.** Measured against that courtyard:
 
@@ -408,9 +410,10 @@ Edit `hardware/kicad/check_board.py`:
 
 ```python
     "j2_footprint": "Connector_JST:JST_ZH_S7B-ZR-SM4A-TF_1x07-1MP_P1.50mm_Horizontal",
-    "j2_pos": (56.65, 15.65, 90.0),
-    "c1_pos": (51.4, 20.85, 90.0),
-    "q3_pos": (51.15, 9.3375, 90.0),
+    "j2_pos": (56.15, 15.15, 90.0),
+    "c1_pos": (50.8926, 20.4, 90.0),
+    "q3_pos": (50.65, 8.8375, 90.0),
+    "board_size": (62.3, 30.3),
 ```
 
 - [ ] **Step 3: Run the board group to confirm it fails, and that it fails for the right reasons**
@@ -630,7 +633,19 @@ In `hardware/kicad/build_board.py`:
  "C1":(51.4, 20.85, 90.0),
 ```
 
-and set `POS["Q3"]` to `(51.15, 9.3375, 90.0)`. Use the as-placed values if Task 4 moved anything.
+and set `POS["Q3"]` to `(50.65, 8.8375, 90.0)`. Use the as-placed values if Task 4 moved anything.
+
+**Also the outline constants**, which the 2026-09-22 shrink invalidated — the script would otherwise seed a board of the old size:
+
+```python
+BOARD_W, BOARD_H = 62.3, 30.3   # mm
+```
+
+```python
+END_R  = 17.5
+```
+
+`SAG` is derived from those two and needs no edit.
 
 - [ ] **Step 3: Add the banner the spec's risk section asks for**
 
@@ -725,6 +740,9 @@ Expected: `0 failure(s)`, exit 0.
 - [ ] **Step 5: Update the prose the checker cannot see**
 
 - `hardware/schematic-nets.md` §2.5: change the heading line **`**J2 = PicoBlade 7-pos (6 populated, pin 7 = NC):**`** to name the ZH part, and add below the table: the physical 1..7 order is resolved by the footprint as of rev B — pad 1 is the pad nearest the board's bottom edge, and the harness's empty position lands on pad 7 (or the reverse, per Task 2 Step 1's finding).
+- `docs/superpowers/specs/2026-09-21-rev-b-connector-design.md` §4 item 5 ("Outline unchanged: 63.3 × 31.3") and the §3.2 sentence reasoning from "a board that ends at 63.3": both are superseded by the 2026-09-22 shrink to 62.3 × 30.3. Record the reason — rev A fits the housing too tightly — rather than silently editing the numbers.
+- `docs/superpowers/specs/2026-09-21-rev-b-connector-design.md` §5: the pin-1 rule ("pad 7 nearest the board edge (4.8 mm)") matches no geometry and has the order backwards; pad 1 is the bottom-most pad. Same correction in `phase0-measurements.md` P0.3/P0.6.
+- **Leave alone:** `phase0-measurements.md` line 89 and `2026-08-03-tht-board-design.md` line 32 both give 63.3 × 31.3 as the **stock envelope** measurement. That is still true — it is our board that shrank, not the can.
 - `docs/research/teardown-reference.md` lines ~20–22: keep the ZH finding, and replace "rev A's board/BOM need a J2 footprint swap" with a note that rev B carries that swap.
 - `docs/superpowers/research/phase0-measurements.md` P0.1: change the heading's "physical 1..7 order still TODO" — rev B resolves it by construction.
 - `hardware/calcs.md` lines 30–32: "rev B should fix the trace width rather than spend the margin" becomes: rev B *did* widen the power nets to 0.5 mm, moving the track limit to ~1.5 A, and the binding constraint is now J2's 1.0 A/contact and the unmeasured `+4V7` rail — **not** a licence to raise the cap.
@@ -851,7 +869,7 @@ Spec §4 asks for five things before gerbers are released:
 | 2. Netlist assertion on J2 pads 1–7 | Task 1's `J2 pad nets` check, re-run at Tasks 2, 4, 6, 7 — explicit, not inferred from placement |
 | 3. Track-width regression over the `.kicad_pcb` | Task 1's per-net width check, tightened to 0.5 mm in Task 3 |
 | 4. 1:1 print against the physical connector | Task 7 Step 4 |
-| 5. Outline unchanged, 63.3 × 31.3 with 18 mm ends | Task 1's outline check, which runs on every invocation |
+| 5. Outline ~~unchanged~~ — now 62.3 × 30.3 with R 17.5 ends | Task 1's outline check, which runs on every invocation. The spec's "unchanged" wording is superseded; see the Global Constraints note and Task 6. |
 
 ## After fab
 

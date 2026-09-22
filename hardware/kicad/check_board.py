@@ -21,17 +21,17 @@ PCB = os.path.join(HERE, "lumary-brain.kicad_pcb")
 SCRIPT = os.path.join(HERE, "build_board.py")
 
 EXPECT = {
-    "j2_footprint": "Connector_Molex:Molex_PicoBlade_53047-0710_1x07_P1.25mm_Vertical",
-    "j2_pos": (59.5, 19.0, 90.0),
+    "j2_footprint": "Connector_JST:JST_ZH_S7B-ZR-SM4A-TF_1x07-1MP_P1.50mm_Horizontal",
+    "j2_pos": (56.15, 15.15, 90.0),
     "j2_pads": {"1": "+36V", "2": "CW_RET", "3": "WW_RET", "4": "+4V7",
                 "5": "GND", "6": "RING_DATA", "7": None},
-    "c1_pos": (53.4, 20.85, 90.0),
-    "q3_pos": (51.5, 9.3375, 90.0),
+    "c1_pos": (50.8926, 20.4, 90.0),
+    "q3_pos": (50.65, 8.8375, 90.0),
     "power_nets": ["+36V", "+4V7", "+4V7_IN", "+3V3", "VBUS", "LDO_IN", "CW_RET", "WW_RET"],
     "min_power_width": 0.2,
     # net -> (allowed_uuids, why). Segments with UUIDs in the list are allowed to be thin.
     "width_exceptions": {},
-    "board_size": (63.3, 31.3),
+    "board_size": (62.3, 30.3),
     "j2_bom_keyword": "PicoBlade",
 }
 TOL = 0.02
