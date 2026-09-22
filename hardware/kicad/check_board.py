@@ -134,7 +134,7 @@ def check_board(rep):
             if pad[1] == "MP":          # mounting tabs carry no net
                 continue
             n = first(pad, "net")
-            pads[pad[1]] = n[1] if n else None
+            pads[pad[1]] = n[-1] if n else None
         rep.check(pads == EXPECT["j2_pads"], "J2 pad nets %s" % pads)
     at_check("J2", "j2_pos")
     at_check("C1", "c1_pos")
