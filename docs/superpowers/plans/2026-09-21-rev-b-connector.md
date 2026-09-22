@@ -567,9 +567,13 @@ Expected: `0 failure(s)`. If a DRC fix moved C1, Q3 or J2, update `EXPECT` to th
 
 - [ ] **Step 5: Commit**
 
+**`drc.json` is not committed** — `hardware/kicad/.gitignore:1` ignores it, and it has never been tracked. That is the repo's existing decision and this plan keeps it: the gate is the violation count you just read, not a committed report. Quote that count in the commit message instead.
+
 ```bash
-git add hardware/kicad/drc.json hardware/kicad/lumary-brain.kicad_pcb hardware/kicad/check_board.py
+git add hardware/kicad/lumary-brain.kicad_pcb hardware/kicad/check_board.py
 git commit -m "test: DRC clean on the rev B layout
+
+0 violations, 0 unconnected items. drc.json stays local -- it is gitignored.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
@@ -733,7 +737,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ### Task 7: Fab outputs and the physical gate
 
 **Files:**
-- Modify: `hardware/kicad/cpl.csv`, `hardware/kicad/pos-raw.csv`, `hardware/kicad/lumary-brain-gerbers.zip` (all regenerated — J2 and C1 moved, so every one of them is stale)
+- Modify: `hardware/kicad/cpl.csv`, `hardware/kicad/pos-raw.csv`, `hardware/kicad/lumary-brain-gerbers.zip`, and the **tracked `hardware/kicad/gerbers/` directory** (14 files) — J2 and C1 moved, so every one of them is stale. The loose directory is tracked alongside the zip; regenerating only the zip would leave rev A gerbers in the repo next to a rev B archive.
 
 **Interfaces:**
 - Consumes: the board from Task 6.
@@ -770,20 +774,24 @@ Expected: `J2,174.2574mm,-96.7500mm,Top,…` and `C1,169.0074mm,-101.9500mm,Top,
 
 - [ ] **Step 3: Regenerate the gerbers and drill files**
 
+Regenerate **into the tracked directory**, not a temp one, then pack that same directory into the zip:
+
 ```bash
-rm -rf hardware/kicad/_gerbers && "/c/Program Files/KiCad/10.0/bin/kicad-cli.exe" pcb export gerbers --output hardware/kicad/_gerbers hardware/kicad/lumary-brain.kicad_pcb && "/c/Program Files/KiCad/10.0/bin/kicad-cli.exe" pcb export drill --output hardware/kicad/_gerbers hardware/kicad/lumary-brain.kicad_pcb && python - <<'PY'
+rm -f hardware/kicad/gerbers/* && "/c/Program Files/KiCad/10.0/bin/kicad-cli.exe" pcb export gerbers --output hardware/kicad/gerbers hardware/kicad/lumary-brain.kicad_pcb && "/c/Program Files/KiCad/10.0/bin/kicad-cli.exe" pcb export drill --output hardware/kicad/gerbers hardware/kicad/lumary-brain.kicad_pcb && python - <<'PY'
 import pathlib, zipfile
-src = pathlib.Path("hardware/kicad/_gerbers")
+src = pathlib.Path("hardware/kicad/gerbers")
 with zipfile.ZipFile("hardware/kicad/lumary-brain-gerbers.zip", "w", zipfile.ZIP_DEFLATED) as z:
     for f in sorted(src.iterdir()):
         if f.is_file():
             z.write(f, f.name)
             print("packed", f.name)
 PY
-rm -rf hardware/kicad/_gerbers
+git status --short hardware/kicad/gerbers/
 ```
 
 (Python's `zipfile` rather than `zip`, which is not on PATH in this Git Bash.)
+
+The rev A directory held 14 files including `lumary-brain-In1_Cu.g1` and `-In2_Cu.g2`. This is a **two-layer** board, so a clean export should not produce inner-layer files at all — if they do not come back, that is correct and their deletion gets committed. Stage the directory with `git add -A hardware/kicad/gerbers/` in Step 6 so removals are staged along with changes; a plain `git add` of the path would leave the stale files tracked.
 
 - [ ] **Step 4: 1:1 print, checked against the physical part**
 
@@ -802,7 +810,7 @@ Expected: `0 failure(s)` from the checker and `violations: 0`.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add hardware/kicad/cpl.csv hardware/kicad/pos-raw.csv hardware/kicad/lumary-brain-gerbers.zip hardware/kicad/drc.json
+git add -A hardware/kicad/gerbers/ && git add hardware/kicad/cpl.csv hardware/kicad/pos-raw.csv hardware/kicad/lumary-brain-gerbers.zip
 git commit -m "release: rev B fab package
 
 Gerbers, drill and CPL regenerated against the rev B board -- J2 and C1 both
