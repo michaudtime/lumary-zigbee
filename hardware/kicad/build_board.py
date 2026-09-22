@@ -22,12 +22,12 @@ OUT  = os.path.join(HERE, "lumary-brain.kicad_pcb")
 FPBASE = r"C:/Program Files/KiCad/10.0/share/kicad/footprints"
 
 BOARD_W, BOARD_H = 62.3, 30.3   # mm
-# Ends are single 18mm-radius arcs (case corner rounding, user-measured): each end
-# bulges sagitta = R - sqrt(R^2-(H/2)^2) ~= 9.1mm deep -> ~45mm straight section
-# (matches user's "about 44mm square portion").
+# Ends are single 17.5mm-radius arcs (case corner rounding, user-measured): each end
+# bulges sagitta = R - sqrt(R^2-(H/2)^2) ~= 8.74mm deep -> ~44.8mm straight section
+# (matches user's original measurement of "about 44mm square portion").
 import math as _math
 END_R  = 17.5
-SAG    = END_R - _math.sqrt(END_R**2 - (BOARD_H/2)**2)   # ~9.11 mm
+SAG    = END_R - _math.sqrt(END_R**2 - (BOARD_H/2)**2)   # ~8.74 mm
 
 def mm(v): return pcbnew.FromMM(v)
 def xy(x, y): return pcbnew.VECTOR2I(mm(x), mm(y))
@@ -223,7 +223,7 @@ def main():
         ref.SetTextPos(f.GetPosition())
         f.Value().SetVisible(False)
 
-    # board outline: straight top/bottom + single 18mm-radius arc at each end
+    # board outline: straight top/bottom + single 17.5mm-radius arc at each end
     W,H,R,S = BOARD_W, BOARD_H, END_R, SAG
     def line(x1,y1,x2,y2):
         s=pcbnew.PCB_SHAPE(board); s.SetShape(pcbnew.SHAPE_T_SEGMENT)
