@@ -26,17 +26,20 @@ Measure pitch with calipers → JST family: 1.0 mm=SH, 1.25 mm=GH, 1.5 mm=ZH, 2.
   B (2026-09-21/22) carries the footprint swap to
   `Connector_JST:JST_ZH_S7B-ZR-SM4A-TF_1x07-1MP_P1.50mm_Horizontal`** — `hardware/bom.csv`,
   `hardware/kicad/bom-jlc.csv` and `hardware/kicad/footprints-and-pins.md` now specify it, so CN1
-  mates directly with no pigtail. physical pin order (1..7) = **resolved by the rev B footprint**:
-  pad 1 is the bottom-most pad (board-local y 19.00), stepping up 1.25 mm per pad to pad 7 (NC) at
-  y 11.50; confirmed against a photo of the working rev A board, where the black `V+` wire sits at
-  the bottom end (pad 1). Full detail in `hardware/schematic-nets.md` §2.5.
+  mates directly with no pigtail. physical pin order (1..7) = **resolved by the rev B footprint** —
+  as built (board-local, post-shrink frame): all seven pads at x 54.500, pitch 1.5 mm, span pad 1 →
+  pad 7 = 9.0 mm; pad 1 (`+36V`) bottom-most at y 19.650, pad 4 (`+4V7`) the centre pad at y 15.150,
+  pad 7 (NC) top-most at y 10.650. (Rev A's numbers — x 59.50, pitch 1.25 mm, pad 1 at y 19.00 — were
+  the pre-shrink frame used only to establish which end is pin 1, confirmed against a photo of the
+  working rev A board where the black `V+` wire sits at the bottom end.) Full detail in
+  `hardware/schematic-nets.md` §2.5.
   **History:** the interim plan (no KiCad/BOM respin; bring up the existing 5 rev A boards with a
   short ZH1.5-7P-to-PicoBlade-7P pigtail adapter) was superseded once the rev B fab run above
   happened; the pigtail remains valid for already-built rev A boards.
 
 ---
 
-## P0.3 — CN1 pinout  (Task 0.2)  — DONE (physical 1..7 order still TODO)
+## P0.3 — CN1 pinout  (Task 0.2)  — DONE (physical 1..7 order resolved by rev B construction)
 7-position PicoBlade, 6 wires populated, split 3 (inner white) + 3 (outer addressable ring):
 
 | Label | Wire | Role | Board net |
@@ -49,7 +52,11 @@ Measure pitch with calipers → JST family: 1.0 mm=SH, 1.25 mm=GH, 1.5 mm=ZH, 2.
 | `DIM` | Blue   | **Outer ring DATA** (single-wire addressable; "DIM" is vendor's generic name) | level-shifted data out |
 | (7th) | none   | unpopulated | — |
 
-- Physical position resolved by rev B construction (no scan needed): pad 1 is the pad nearest the board's bottom edge, and the harness's empty position lands on pad 7 (nearest the top). Confirmed against a photo of the working rev A board — the black `V+` wire sits at the bottom end, which is pad 1. See `hardware/schematic-nets.md` §2.5.
+- Physical position resolved by rev B construction (no scan needed): as built, pad 1 (`V+`/`+36V`) is
+  the bottom-most pad (board-local y 19.650, largest y), pad 4 (`5V+`/`+4V7`) is the centre pad
+  (y 15.150, orientation-independent either way), and the harness's empty position lands on pad 7
+  (NC, y 10.650, nearest the top). Confirmed against a photo of the working rev A board — the black
+  `V+` wire sits at the bottom end, which is pad 1. Full table in `hardware/schematic-nets.md` §2.5.
 - Confirmation logic: a color *gradient* over a single control wire ⇒ addressable, so `DIM` = data, not analog dim.
 
 ---
@@ -99,8 +106,8 @@ No scan will be provided. Design to the measured envelope; outline = rounded rec
   (no screw holes visible in photos). ⚠️ Correct if the fixture actually screws the board down.
 - connector placement (from photos) = **power-in (J1) at one short end, CN1 (J2) at the other short
   end**, matching stock harness exits. J2 pin order = stock label order V+/CW-/WW-/5V+/GND/DIM/(NC);
-  orientation resolved and confirmed at rev B layout: pad 1 (`V+`) is the bottom-most pad, pad 7
-  (NC) the top-most, matching the photo of the working rev A board (black `V+` wire at the bottom
-  end).
+  orientation resolved and confirmed at rev B layout: pad 1 (`V+`) is the bottom-most pad
+  (board-local y 19.650), pad 4 (`5V+`) the centre pad (y 15.150), pad 7 (NC) the top-most
+  (y 10.650) — matching the photo of the working rev A board (black `V+` wire at the bottom end).
 - antenna keepout = MINI-1 PCB antenna at a short **end**, toward the fixture opening; stock 2.4 GHz
   module ran from this area, so RF is low-risk. Keep copper clear under the antenna on all layers.

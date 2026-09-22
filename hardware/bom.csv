@@ -10,7 +10,7 @@ D1,1,B5819W Schottky (4V7 diode-OR),SOD-123,VERIFY,VERIFY,+4V7 -> LDO_IN
 D2,1,B5819W Schottky (USB diode-OR),SOD-123,VERIFY,VERIFY,USB VBUS -> LDO_IN (bench flash)
 D3,1,SMAJ5.0A TVS,SMA,VERIFY,VERIFY,Transient clamp on +4V7 input
 J1,1,JST-PH 2.0mm 3-pin (power-in),B3B-PH-K-S TH,VERIFY,VERIFY,GND/36V/4V7 in; polarized; parallel solder pads on same nets
-J2,1,ZH 1.5mm 7-pos side entry (CN1 out),S7B-ZR-SM4A-TF 1.5mm 7P SMD,,VERIFY,To LED module; 6 populated per P0.3 pinout; hand-fit like C1/C2/Q1/Q2/SW1/SW2 -- no LCSC; never JLC-assembled
+J2,1,ZH 1.5mm 7-pos side entry (CN1 out),S7B-ZR-SM4A-TF 1.5mm 7P SMD,,VERIFY,To LED module; 6 populated per P0.3 pinout; hand-fit; never JLC-assembled
 J3,1,TYPE-C-31-M-12 (USB-C),USB-C 16P SMD,C165948,CONFIRMED,Native USB + bench 5V
 SW1,1,Tact switch (BOOT/IO9),SMD 2-pin,VERIFY,VERIFY,Bench download-mode
 SW2,1,Tact switch (EN/reset),SMD 2-pin,VERIFY,VERIFY,Bench reset

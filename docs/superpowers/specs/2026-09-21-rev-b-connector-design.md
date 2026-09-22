@@ -163,7 +163,7 @@ Before releasing gerbers:
    at 63.3 × 31.3 mm did not survive contact with the housing — rev A's board fits the can too
    tightly. The board is now **62.3 × 30.3 mm**, end arcs radius 17.5 mm about unchanged centres.
    The stock can/housing envelope itself is still 63.3 × 31.3 × 6.7 mm (`phase0-measurements.md`
-   line 89, `2026-08-03-tht-board-design.md` line 32) — it is our board that shrank, not the can.
+   §P0.6, `2026-08-03-tht-board-design.md` line 32) — it is our board that shrank, not the can.
 
 After fab, the first board is brought up on the bench against a real harness with no pigtail, and
 the existing bench checklist re-run.
@@ -179,8 +179,11 @@ the existing bench checklist re-run.
 - **`U3` clears J2 by only ~0.6 mm** in Y. If DRC objects, `U3` moves rather than J2 — J2's position
   is pinned by the arc.
 - **The pin-1 physical order was never scanned** (P0.6: "no scan will be provided"). Rev B resolves
-  it by construction: the routed copper puts every J2 pad at board-local x 59.50, pad 1 the
-  bottom-most at y 19.00, stepping up 1.25 mm per pad to pad 7 (NC) at y 11.50 (11.50 mm from the
-  top edge, 3.32 mm from the curved right edge). Orientation is confirmed, not just inferred — a
-  photo of the working rev A board shows the black `V+` wire at the bottom end, which is pad 1, so
-  the harness's blank position lands on pad 7.
+  it by construction. As built (board-local, post-shrink frame): all seven J2 pads sit at x =
+  54.500, pitch 1.500 mm, span pad 1 → pad 7 = 9.000 mm — pad 1 (`+36V`) is the bottom-most at
+  y = 19.650, pad 4 (`+4V7`) is the centre pad at y = 15.150 (orientation-independent either way),
+  and pad 7 (NC) is the top-most at y = 10.650. The two MP mounting tabs sit at x = 58.200, y =
+  21.600 and 8.700. Orientation is confirmed, not just inferred: a photo of the working rev A board
+  shows the black `V+` wire at the bottom end, which is pad 1 — established in rev A's own
+  pre-shrink frame (pads at x 59.50, pitch 1.25 mm, pad 1 at y 19.00) and carried forward unchanged
+  into rev B's geometry. The harness's blank position lands on pad 7, at the top.

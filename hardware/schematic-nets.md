@@ -168,11 +168,27 @@ returns; `+36V` = J1 + C1 + CN1.V+ only; MOSFET Vds sees ≤35.8 V (needs ≥60 
 | 6 | DIM | `RING_DATA` |
 | 7 | (empty) | NC |
 
-**Physical 1–7 order resolved by rev B construction:** the ZH footprint places every J2 pad at
-board-local x 59.50, pad 1 the bottom-most at y 19.00, stepping up 1.25 mm per pad to pad 7 (NC) at
-y 11.50 (11.50 mm from the top edge, 3.32 mm from the curved right edge). The harness's empty
-position lands on pad 7. Orientation was confirmed against a photo of the working rev A board: the
-black `V+` wire sits at the bottom end, which is pad 1.
+**Physical 1–7 order, rev B as built (authoritative — board-local, post-shrink frame):**
+
+| Pad | Net | Board-local x | Board-local y |
+|---|---|---|---|
+| 1 | `+36V` | 54.500 | 19.650 (bottom-most) |
+| 2 | `CW_RET` | 54.500 | 18.150 |
+| 3 | `WW_RET` | 54.500 | 16.650 |
+| 4 | `+4V7` | 54.500 | 15.150 (centre pad — orientation-independent) |
+| 5 | `GND` | 54.500 | 13.650 |
+| 6 | `RING_DATA` | 54.500 | 12.150 |
+| 7 | NC | 54.500 | 10.650 (top-most) |
+
+Pitch 1.500 mm, pad 1 → pad 7 span 9.000 mm. The two MP mounting tabs sit at x = 58.200, y = 21.600
+and y = 8.700. The harness's empty position lands on pad 7, at the top.
+
+**Orientation provenance (rev A, pre-shrink frame — not current geometry):** pin 1 was identified as
+the bottom-most pad using rev A's own PicoBlade-pitch layout (board-local x 59.50, pad 1 at y 19.00,
+1.25 mm pitch), confirmed against a photo of the working rev A board — the black `V+` wire sits at
+the bottom end, which is pad 1. The rule carries forward unchanged into rev B: pad 1 is the
+bottom-most pad (largest board-local y), pad 4 is the centre pad and is `+4V7` either way, and the
+harness's blank position lands on pad 7 at the top.
 
 **Master component check** (all `bom.csv` designators placed):
 U1 U2 U3 U4 · Q1 Q2 Q3 · D1 D2 D3 · J1 J2 J3 · SW1 SW2 · C1–C8 · R1–R7 (R7 ×2) · R8 (rev-pol gate). ✅
