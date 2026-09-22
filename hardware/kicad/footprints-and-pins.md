@@ -16,7 +16,7 @@ Toolchain: KiCad 10.0.5, `kicad-cli` + bundled `pcbnew` Python API confirmed wor
 | D1,D2 | B5819W Schottky | `Diode_SMD:D_SOD-123` |
 | D3 | SMAJ5.0A TVS | `Diode_SMD:D_SMA` |
 | J1 | JST-PH 2.0 3-pin | `Connector_JST:JST_PH_S3B-PH-K_1x03_P2.00mm_Horizontal` |
-| J2 | PicoBlade 1.25 7-pin | `Connector_Molex:Molex_PicoBlade_53047-0710_1x07_P1.25mm_Vertical` |
+| J2 | JST ZH 1.5 7-pin side entry | `Connector_JST:JST_ZH_S7B-ZR-SM4A-TF_1x07-1MP_P1.50mm_Horizontal` |
 | J3 | USB-C TYPE-C-31-M-12 | `Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12` |
 | SW1,SW2 | tact | `Button_Switch_SMD:SW_SPST_SKQG_WithoutStem` (verify at build) |
 | C1 | 10 µF/50 V | `Capacitor_SMD:C_0805_2012Metric` |

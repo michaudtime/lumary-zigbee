@@ -19,7 +19,7 @@ The original controller board removed from the light. Key observations:
   earlier "8–10 pins" estimate, which is what led rev A to be built on a guessed part).
   **Pitch/family confirmed 2026-09-04: JST ZH, 1.5 mm pitch, 7-position** — physically verified
   with purchased ZH1.5 7P connectors, which mate cleanly. The rev A PicoBlade 1.25 mm choice does
-  **not** mate; rev A's board/BOM need a J2 footprint swap to ZH 1.5mm before CN1 will fit
+  **not** mate; rev B carries the J2 footprint swap to ZH 1.5mm so CN1 fits
   (see P0.1 in `docs/superpowers/research/phase0-measurements.md`).
 - **Passives:** 330Ω resistor upper left, two 4.7µF 50V capacitors
 - **Logic IC:** A08G AND gate (controls outer ring enable logic)

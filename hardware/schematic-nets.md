@@ -156,7 +156,7 @@ returns; `+36V` = J1 + C1 + CN1.V+ only; MOSFET Vds sees ≤35.8 V (needs ≥60 
 
 ## Task 2.5 — CN1 (J2) full mapping + master check
 
-**J2 = PicoBlade 7-pos (6 populated, pin 7 = NC):**
+**J2 = JST ZH 1.5mm 7-pos side entry (6 populated, pin 7 = NC):**
 
 | J2 pin | Label | Net |
 |---|---|---|
@@ -168,7 +168,11 @@ returns; `+36V` = J1 + C1 + CN1.V+ only; MOSFET Vds sees ≤35.8 V (needs ≥60 
 | 6 | DIM | `RING_DATA` |
 | 7 | (empty) | NC |
 
-*(Physical 1–7 order to be aligned to the housing per P0.6 scan before layout.)*
+**Physical 1–7 order resolved by rev B construction:** the ZH footprint places every J2 pad at
+board-local x 59.50, pad 1 the bottom-most at y 19.00, stepping up 1.25 mm per pad to pad 7 (NC) at
+y 11.50 (11.50 mm from the top edge, 3.32 mm from the curved right edge). The harness's empty
+position lands on pad 7. Orientation was confirmed against a photo of the working rev A board: the
+black `V+` wire sits at the bottom end, which is pad 1.
 
 **Master component check** (all `bom.csv` designators placed):
 U1 U2 U3 U4 · Q1 Q2 Q3 · D1 D2 D3 · J1 J2 J3 · SW1 SW2 · C1–C8 · R1–R7 (R7 ×2) · R8 (rev-pol gate). ✅

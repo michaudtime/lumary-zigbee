@@ -14,7 +14,7 @@ Plan: `docs/superpowers/plans/2026-08-01-brain-replacement-board.md`
 
 ---
 
-## P0.1 — Connectors  (Task 0.1)  — DONE (CN1 corrected; physical 1..7 order still TODO)
+## P0.1 — Connectors  (Task 0.1)  — DONE (CN1 corrected; physical 1..7 order resolved by rev B construction)
 Measure pitch with calipers → JST family: 1.0 mm=SH, 1.25 mm=GH, 1.5 mm=ZH, 2.0 mm=PH.
 
 - Power-in:  **soldered on stock board (no existing connector).** New board = **3-pin JST-PH 2.0 mm (polarized) + parallel solder pads** (DECIDED — both options on the footprint; user has PH stock). Wires: GND / 36 V / 4.7 V. Pin order on our connector is our choice → keep GND on an end pin, key so 36 V can't swap with 4.7 V.
@@ -22,12 +22,17 @@ Measure pitch with calipers → JST family: 1.0 mm=SH, 1.25 mm=GH, 1.5 mm=ZH, 2.
   **corrected 2026-09-04**: physically verified against the stock connector with purchased ZH1.5 7P
   parts (mates cleanly). Supersedes the earlier 1.25 mm/PicoBlade reading, which rev A's J2 was
   fabbed against and which does **not** mate (see `docs/research/teardown-reference.md`). Rev A's
-  board and BOM (`hardware/kicad/footprints-and-pins.md`, `hardware/bom.csv`) still specify
-  `Molex_PicoBlade_53047-0710_1x07_P1.25mm_Vertical` for J2 — needs a rev B footprint swap to a JST
-  ZH 1.5mm 7-position part before CN1 will mate.  physical pin order (1..7) = `___ (TODO from scan)`
-  **Plan:** no KiCad/BOM respin yet — bringing up the existing 5 rev A boards with a short
-  ZH1.5-7P-to-PicoBlade-7P pigtail adapter instead. Revisit the J2 footprint for a rev B only if/when
-  another fab run happens.
+  board and BOM were fabbed against `Molex_PicoBlade_53047-0710_1x07_P1.25mm_Vertical` for J2; **rev
+  B (2026-09-21/22) carries the footprint swap to
+  `Connector_JST:JST_ZH_S7B-ZR-SM4A-TF_1x07-1MP_P1.50mm_Horizontal`** — `hardware/bom.csv`,
+  `hardware/kicad/bom-jlc.csv` and `hardware/kicad/footprints-and-pins.md` now specify it, so CN1
+  mates directly with no pigtail. physical pin order (1..7) = **resolved by the rev B footprint**:
+  pad 1 is the bottom-most pad (board-local y 19.00), stepping up 1.25 mm per pad to pad 7 (NC) at
+  y 11.50; confirmed against a photo of the working rev A board, where the black `V+` wire sits at
+  the bottom end (pad 1). Full detail in `hardware/schematic-nets.md` §2.5.
+  **History:** the interim plan (no KiCad/BOM respin; bring up the existing 5 rev A boards with a
+  short ZH1.5-7P-to-PicoBlade-7P pigtail adapter) was superseded once the rev B fab run above
+  happened; the pigtail remains valid for already-built rev A boards.
 
 ---
 
@@ -44,7 +49,7 @@ Measure pitch with calipers → JST family: 1.0 mm=SH, 1.25 mm=GH, 1.5 mm=ZH, 2.
 | `DIM` | Blue   | **Outer ring DATA** (single-wire addressable; "DIM" is vendor's generic name) | level-shifted data out |
 | (7th) | none   | unpopulated | — |
 
-- Still TODO: physical position of each label on the 7-way housing (which end is pin 1, where the empty slot is) — read off the P0.6 scan.
+- Physical position resolved by rev B construction (no scan needed): pad 1 is the pad nearest the board's bottom edge, and the harness's empty position lands on pad 7 (nearest the top). Confirmed against a photo of the working rev A board — the black `V+` wire sits at the bottom end, which is pad 1. See `hardware/schematic-nets.md` §2.5.
 - Confirmation logic: a color *gradient* over a single control wire ⇒ addressable, so `DIM` = data, not analog dim.
 
 ---
@@ -94,6 +99,8 @@ No scan will be provided. Design to the measured envelope; outline = rounded rec
   (no screw holes visible in photos). ⚠️ Correct if the fixture actually screws the board down.
 - connector placement (from photos) = **power-in (J1) at one short end, CN1 (J2) at the other short
   end**, matching stock harness exits. J2 pin order = stock label order V+/CW-/WW-/5V+/GND/DIM/(NC);
-  align pin 1 to the housing from a CN1 photo at layout time. ⚠️ Confirm orientation before fab.
+  orientation resolved and confirmed at rev B layout: pad 1 (`V+`) is the bottom-most pad, pad 7
+  (NC) the top-most, matching the photo of the working rev A board (black `V+` wire at the bottom
+  end).
 - antenna keepout = MINI-1 PCB antenna at a short **end**, toward the fixture opening; stock 2.4 GHz
   module ran from this area, so RF is low-risk. Keep copper clear under the antenna on all layers.

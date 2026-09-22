@@ -77,6 +77,12 @@ edge 62.06) it would reach x ≈ 64.0 on a board that ends at 63.3 — it overha
 inboard, and the board's right end is a single 18 mm-radius arc, so every millimetre further right
 costs vertical room.
 
+**Superseded 2026-09-22:** the outline itself has since shrunk to 62.3 × 30.3 mm (0.5 mm inset per
+side, see §4), because rev A's 63.3 × 31.3 mm outline fits the housing too tightly. Every "ends at
+63.3" figure above is from the pre-shrink outline; it does not change where J2 sits (still
+board-local (56.15, 15.15), rotation 90 — see `hardware/kicad/check_board.py`), only how much margin
+is left around it.
+
 **J2 goes on the board's Y midline (y ≈ 15.65), courtyard X ≈ 53.7–61.7**, rotated so the opening
 faces +X. Centring on the midline is what buys the rightmost position, because that is where the arc
 is widest: requiring the courtyard's corners at y = 15.65 ± 7.5 to fall inside the arc gives a
@@ -153,7 +159,11 @@ Before releasing gerbers:
 3. **Track-width regression**: re-run the per-net width measurement over the `.kicad_pcb` and
    confirm the Power nets are no longer 0.20 mm.
 4. **1:1 print** checked against the physical ZH connector already purchased.
-5. **Outline unchanged**: 63.3 × 31.3 mm with 18 mm-radius ends, so it still fits the can.
+5. **Outline shrunk 0.5 mm/side (superseded 2026-09-22):** the plan to leave the outline unchanged
+   at 63.3 × 31.3 mm did not survive contact with the housing — rev A's board fits the can too
+   tightly. The board is now **62.3 × 30.3 mm**, end arcs radius 17.5 mm about unchanged centres.
+   The stock can/housing envelope itself is still 63.3 × 31.3 × 6.7 mm (`phase0-measurements.md`
+   line 89, `2026-08-03-tht-board-design.md` line 32) — it is our board that shrank, not the can.
 
 After fab, the first board is brought up on the bench against a real harness with no pigtail, and
 the existing bench checklist re-run.
@@ -169,5 +179,8 @@ the existing bench checklist re-run.
 - **`U3` clears J2 by only ~0.6 mm** in Y. If DRC objects, `U3` moves rather than J2 — J2's position
   is pinned by the arc.
 - **The pin-1 physical order was never scanned** (P0.6: "no scan will be provided"). Rev B resolves
-  it by construction, since the footprint's own pin 1 is unambiguous, but the harness's blank
-  position should still be confirmed against pad 7 on the first assembled board before power-on.
+  it by construction: the routed copper puts every J2 pad at board-local x 59.50, pad 1 the
+  bottom-most at y 19.00, stepping up 1.25 mm per pad to pad 7 (NC) at y 11.50 (11.50 mm from the
+  top edge, 3.32 mm from the curved right edge). Orientation is confirmed, not just inferred — a
+  photo of the working rev A board shows the black `V+` wire at the bottom end, which is pad 1, so
+  the harness's blank position lands on pad 7.

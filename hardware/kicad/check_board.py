@@ -32,7 +32,7 @@ EXPECT = {
     # net -> (allowed_uuids, why). Segments with UUIDs in the list are allowed to be thin.
     "width_exceptions": {},
     "board_size": (62.3, 30.3),
-    "j2_bom_keyword": "PicoBlade",
+    "j2_bom_keyword": "ZH 1.5mm",
 }
 TOL = 0.02
 TOKEN = re.compile(r'"(?:[^"\\]|\\.)*"|[()]|[^\s()]+')
