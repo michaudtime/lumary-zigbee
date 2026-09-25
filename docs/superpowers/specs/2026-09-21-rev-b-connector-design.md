@@ -142,6 +142,8 @@ rail is measured. `hardware/calcs.md` line 30 should be corrected to say so.
   JLC-assembled. **Decision: keep J2 hand-fit**, matching rev A and the other blank-LCSC parts
   (`C1`, `C2`, `Q1`, `Q2`, `SW1`, `SW2`); the user already has ZH parts in hand. Revisit only if
   rev B moves to full JLC assembly, which is out of scope here.
+  **Superseded 2026-09-25:** rev B is fully JLC-assembled, as rev A was. J2 = `C5118704`
+  (genuine JST `S7B-ZR-SM4A-TF(LF)(SN)`, Extended, SMT-assemblable).
 - `hardware/kicad/footprints-and-pins.md`: J2 footprint name.
 - `hardware/schematic-nets.md` §2.5: drop "J2 = PicoBlade 7-pos"; record that the physical 1..7
   order is now resolved.
