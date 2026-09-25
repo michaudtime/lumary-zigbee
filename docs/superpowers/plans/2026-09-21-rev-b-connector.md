@@ -832,7 +832,9 @@ git status --short hardware/kicad/gerbers/
 
 The rev A directory held 14 files including `lumary-brain-In1_Cu.g1` and `-In2_Cu.g2`. This is a **two-layer** board, so a clean export should not produce inner-layer files at all — if they do not come back, that is correct and their deletion gets committed. Stage the directory with `git add -A hardware/kicad/gerbers/` in Step 6 so removals are staged along with changes; a plain `git add` of the path would leave the stale files tracked.
 
-- [ ] **Step 4: 1:1 print, checked against the physical part**
+- [x] **Step 4: 1:1 print, checked against the physical part**
+
+> **Passed 2026-09-25**, done on-screen instead of on paper: a credit-card-calibrated 1:1 SVG of J2's pads drawn from the `.kicad_pcb`. The user reports the purchased S7B-ZR-SM4A-TF fits and all pads line up.
 
 Print the F.Cu + F.Paste + F.SilkS layers at exactly 1:1 (**File → Plot → PDF**, scale 1.0, no "fit to page") and lay the purchased S7B-ZR-SM4A-TF on the J2 pads. All seven signal pads and both `MP` tabs must sit under their metal. Then lay the stock harness plug against the print and confirm the empty position falls on the pad Task 2 Step 1 predicted.
 
