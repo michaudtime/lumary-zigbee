@@ -1,5 +1,5 @@
 Designator,Qty,Comment/Value,Footprint,LCSC,Status,Notes
-U1,1,ESP32-H2-MINI-1-N4,MINI-1 LGA module,C18203134,CONFIRMED,MCU+Zigbee radio; 4MB flash; PCB antenna (non-U variant)
+U1,1,ESP32-H2-MINI-1-H4S,MINI-1 LGA module,C47967030,CONFIRMED,"MCU+Zigbee radio; 4MB flash; PCB antenna (non-U variant). Rev B: replaces discontinued -N4 (C18203134); chip v1.2, 105C rated, same footprint"
 U2,1,ME6211C33M5G-N (3.3V LDO),SOT-23-5,C82942,CONFIRMED,From diode-OR of +4V7/USB; 260mV dropout @200mA
 U3,1,74AHCT1G125 (buffer/level shift),SOT-23-5,C7484,CONFIRMED,"3.3->4.7V ring data; want AHCT (VIH=2V). Fallback 74AHC1G125GW C85397 (AHC, marginal)"
 U4,1,USBLC6-2SC6 (USB ESD),SOT-23-6,C7519,CONFIRMED,ESD on USB D+/D-/VBUS
