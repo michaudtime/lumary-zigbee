@@ -12,8 +12,8 @@ D3,1,SMAJ5.0A TVS,SMA,C113952,CONFIRMED,Transient clamp on +4V7 input
 J1,1,JST-PH 2.0mm 3-pin (power-in),B3B-PH-K-S TH,C157929,CONFIRMED,GND/36V/4V7 in; polarized; parallel solder pads on same nets
 J2,1,ZH 1.5mm 7-pos side entry (CN1 out),S7B-ZR-SM4A-TF 1.5mm 7P SMD,C5118704,CONFIRMED,To LED module; 6 populated per P0.3 pinout; JLC-assembled from rev B (genuine JST; Extended part)
 J3,1,TYPE-C-31-M-12 (USB-C),USB-C 16P SMD,C165948,CONFIRMED,Native USB + bench 5V
-SW1,1,Tact switch (BOOT/IO9),SMD 2-pin,C128539,CONFIRMED,Bench download-mode
-SW2,1,Tact switch (EN/reset),SMD 2-pin,C128539,CONFIRMED,Bench reset
+SW1,1,Tact switch (BOOT/IO9),SMD 2-pin,C79174,CONFIRMED,"Bench download-mode; rev B: EVQPUC02K replaces out-of-stock EVQPUA02K C128539 (same family, 2.2N)"
+SW2,1,Tact switch (EN/reset),SMD 2-pin,C79174,CONFIRMED,"Bench reset; rev B: EVQPUC02K replaces out-of-stock EVQPUA02K C128539 (same family, 2.2N)"
 C1,1,10uF 50V bulk (+36V rail),0805,C440198,CONFIRMED,Absorbs switch inrush; mirrors stock 4.7uF/50V
 C2,1,10uF (LDO out +3V3),0603,C19702,CONFIRMED,LDO output cap
 C3,1,1uF (LDO in),0603,C15849,CONFIRMED,LDO input cap
