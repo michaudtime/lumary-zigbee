@@ -10,7 +10,7 @@ Replaces the Tuya WiFi controller inside a **Lumary 6" RGBAI recessed light** wi
 
 | Component | Part |
 |---|---|
-| Controller | **lumary-brain rev A** — custom ESP32-H2-MINI-1 board, drop-in for the stock `KOK-AH-A172C` (see `hardware/`) |
+| Controller | **lumary-brain rev A** — custom ESP32-H2-MINI-1 board, drop-in for the stock `KOK-AH-A172C` (see `hardware/`). **Rev B** (stock-harness JST ZH connector, 2-layer, ESP32-H2-MINI-1-H4S) ordered 2026-11-13 — see `docs/superpowers/plans/2026-09-21-rev-b-connector.md` |
 | Target light | [Lumary Smart RGBAI Recessed Light 6"](https://www.lumarysmart.com/products/lumary-smart-recessed-light-with-gradient-auxiliary-light) |
 | Switch | [Inovelli Blue Series 2-1 Zigbee](https://inovelli.com/products/zigbee-matter-blue-series-smart-2-1-on-off-dimmer-switch) |
 

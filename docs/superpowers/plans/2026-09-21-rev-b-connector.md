@@ -104,7 +104,7 @@ Build the gate first and prove it reads the *current* board correctly. A checker
 - Consumes: nothing.
 - Produces: `python hardware/kicad/check_board.py [--only board|script|docs]`, exit 0 when every check passes, 1 otherwise. Every later task flips values in its `EXPECT` dict and re-runs it. `EXPECT` keys: `j2_footprint`, `j2_pos`, `j2_pads`, `c1_pos`, `q3_pos`, `power_nets`, `min_power_width`, `width_exceptions`, `board_size`, `j2_bom_keyword`.
 
-- [ ] **Step 1: Write the checker, with `EXPECT` describing rev A as it is today**
+- [x] **Step 1: Write the checker, with `EXPECT` describing rev A as it is today**
 
 ```python
 #!/usr/bin/env python
@@ -331,13 +331,13 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-- [ ] **Step 2: Run it — every check must pass on the untouched board**
+- [x] **Step 2: Run it — every check must pass on the untouched board**
 
 Run: `python hardware/kicad/check_board.py`
 
 Expected: **21** `PASS` lines across the three groups (15 board + 4 script + 2 docs), `0 failure(s)`, exit 0. In particular `Q3 at board-local (51.5, 9.3375, 90.0)` and eight power nets reporting `min 0.20 mm`. No `note` lines — every power net has routed segments today.
 
-- [ ] **Step 3: Prove the checker is not vacuous**
+- [x] **Step 3: Prove the checker is not vacuous**
 
 Temporarily change one expectation and confirm it goes red:
 
@@ -353,7 +353,7 @@ python hardware/kicad/check_board.py --only board
 
 Expected: `FAIL  J2 at board-local (59.5, 19.0, 90.0) (expect (59.5, 18.0, 90.0))` and `1 failure(s)`, exit 1.
 
-- [ ] **Step 4: Restore the correct expectation and confirm green again**
+- [x] **Step 4: Restore the correct expectation and confirm green again**
 
 ```bash
 python - <<'PY'
@@ -367,7 +367,7 @@ python hardware/kicad/check_board.py
 
 Expected: `0 failure(s)`, exit 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add hardware/kicad/check_board.py
@@ -393,7 +393,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Consumes: `check_board.py --only board` from Task 1.
 - Produces: J2 at board-local (56.65, 15.65) rot 90 carrying the six nets; C1 at (51.40, 20.85) rot 90; Q3 at (51.15, 9.3375) rot 90. Tasks 3–7 assume these.
 
-- [ ] **Step 1: Settle pin 1's side against the physical harness — before any CAD**
+- [x] **Step 1: Settle pin 1's side against the physical harness — before any CAD**
 
 At rot 90, pad 1 sits at board-local y = 20.15 (**below the midline, toward the bottom edge**) and pad 7 at y = 11.15.
 
@@ -406,7 +406,7 @@ Dry-fit the purchased ZH 7-position connector against the stock harness and reco
 
 This is the failure that destroys boards (36 V onto the 4.7 V rail or the data line), so it is decided by looking at the part, not by inference.
 
-- [ ] **Step 2: Flip `EXPECT` to rev B and watch it go red**
+- [x] **Step 2: Flip `EXPECT` to rev B and watch it go red**
 
 Edit `hardware/kicad/check_board.py`:
 
@@ -418,7 +418,7 @@ Edit `hardware/kicad/check_board.py`:
     "board_size": (62.3, 30.3),
 ```
 
-- [ ] **Step 3: Run the board group to confirm it fails, and that it fails for the right reasons**
+- [x] **Step 3: Run the board group to confirm it fails, and that it fails for the right reasons**
 
 Run: `python hardware/kicad/check_board.py --only board`
 
@@ -431,7 +431,7 @@ FAIL  Q3 at board-local (51.5, 9.3375, 90.0) (expect (51.15, 9.3375, 90.0))
 ```
 The outline, pad-net and width checks must still pass. If the outline check fails here, stop — something already moved that should not have.
 
-- [ ] **Step 4: Make the edit in KiCad**
+- [x] **Step 4: Make the edit in KiCad**
 
 Open `pcbnew.exe` on `hardware/kicad/lumary-brain.kicad_pcb`. In file coordinates (KiCad's own display), the targets are:
 
@@ -451,7 +451,7 @@ Open `pcbnew.exe` on `hardware/kicad/lumary-brain.kicad_pcb`. In file coordinate
 
 **If DRC objects to the Q3 or C4 clearance** (measured 0.30 mm and 0.17 mm to J2's courtyard at these coordinates): Option B is to move **J2** right by 0.25 mm to board-local (56.90, 15.65) — file X 174.507447 — which gives Q3 0.20 mm without touching it, at the cost of the outline-to-courtyard margin dropping 0.51 → 0.26 mm (the connector *body* still clears by ~1.1 mm). Do not move Q3 further left than board-local 51.15: **D1's courtyard ends at x = 49.30** and the two overlap in y. Whichever option is taken, put the as-placed coordinates into `EXPECT`.
 
-- [ ] **Step 5: Run the board group to verify it passes**
+- [x] **Step 5: Run the board group to verify it passes**
 
 Run: `python hardware/kicad/check_board.py --only board`
 
@@ -459,7 +459,7 @@ Expected: `0 failure(s)`, exit 0 — including `J2 pad nets {...}` matching `EXP
 
 A full run (`python hardware/kicad/check_board.py`) is still red on the `script` and `docs` groups at this point; Tasks 5 and 6 close those.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add hardware/kicad/lumary-brain.kicad_pcb hardware/kicad/check_board.py
@@ -490,7 +490,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Consumes: the board from Task 2.
 - Produces: every segment on the eight power nets at ≥ 0.5 mm, or listed in `width_exceptions` with a reason.
 
-- [ ] **Step 1: Raise the expectation and watch it go red**
+- [x] **Step 1: Raise the expectation and watch it go red**
 
 In `hardware/kicad/check_board.py`:
 
@@ -498,7 +498,7 @@ In `hardware/kicad/check_board.py`:
     "min_power_width": 0.5,
 ```
 
-- [ ] **Step 2: Run the board group to confirm it fails**
+- [x] **Step 2: Run the board group to confirm it fails**
 
 Run: `python hardware/kicad/check_board.py --only board`
 
@@ -508,13 +508,13 @@ FAIL  +3V3: 18 segs, min 0.20 mm (need >= 0.5)  [offending: 0ffc0335-8a37-4088-8
 ```
 (UUID list omitted here for brevity. `+36V`, `CW_RET`, `WW_RET`, `+4V7` and `RING_DATA` may already be partly green from Task 2's re-routing.)
 
-- [ ] **Step 3: Widen them in KiCad**
+- [x] **Step 3: Widen them in KiCad**
 
 For each of `+36V`, `+4V7`, `+4V7_IN`, `+3V3`, `VBUS`, `LDO_IN`, `CW_RET`, `WW_RET`: select the net (right-click a track → **Select → Select All Tracks in Net**), then **Edit → Edit Track & Via Properties**, set track width to 0.5 mm, apply. Re-route locally where the wider track now collides rather than leaving a DRC error.
 
 Where 0.5 mm genuinely does not fit on a 63 × 31 mm two-layer board, leave that segment at 0.2 mm and record it — a partial widening is fine, an undocumented one is not.
 
-- [ ] **Step 4: Record any segment that could not be widened**
+- [x] **Step 4: Record any segment that could not be widened**
 
 For each exception, add an entry to `EXPECT["width_exceptions"]` with a list of the segment UUIDs that are allowed to stay thin and the reason:
 
@@ -526,13 +526,13 @@ For each exception, add an entry to `EXPECT["width_exceptions"]` with a list of 
 
 Leave it `{}` if everything widened. To identify segment UUIDs, run `python hardware/kicad/check_board.py --only board` after widening — it names each offending UUID. Copy those UUIDs into the list, not a count; if a future edit fixes one UUID but introduces a different thin segment, both the fix and the regression are visible in the checker's output.
 
-- [ ] **Step 5: Run the board group to verify it passes**
+- [x] **Step 5: Run the board group to verify it passes**
 
 Run: `python hardware/kicad/check_board.py --only board`
 
 Expected: `0 failure(s)`, exit 0. Any net with an exception prints `PASS` with its `[offending: <uuid>, <uuid>, ...: reason]` detail, so the compromise stays visible in the output.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add hardware/kicad/lumary-brain.kicad_pcb hardware/kicad/check_board.py
@@ -561,7 +561,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Consumes: the board from Task 3.
 - Produces: a DRC report with zero unwaived violations, committed alongside the board it describes.
 
-- [ ] **Step 1: Run DRC from the command line**
+- [x] **Step 1: Run DRC from the command line**
 
 ```bash
 "/c/Program Files/KiCad/10.0/bin/kicad-cli.exe" pcb drc --format json --output hardware/kicad/drc.json --severity-error --refill-zones --exit-code-violations hardware/kicad/lumary-brain.kicad_pcb
@@ -569,7 +569,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 `--refill-zones` matters here: `GND` is a pour, and Task 2 moved parts inside it. There is **no `--schematic-parity`** in this project — it has no `.kicad_sch` at all (the netlist lives in `hardware/schematic-nets.md` and was seeded by `build_board.py`), so parity has nothing to compare against. `check_board.py`'s pad-net assertion is what stands in for it.
 
-- [ ] **Step 2: Read the violation count**
+- [x] **Step 2: Read the violation count**
 
 ```bash
 python -c "import json;d=json.load(open('hardware/kicad/drc.json'));print(sum(len(d.get(k,[])) for k in ('violations','unconnected_items')))"
@@ -577,19 +577,19 @@ python -c "import json;d=json.load(open('hardware/kicad/drc.json'));print(sum(le
 
 Expected at first run: a non-zero count is likely — courtyard clearance around J2/Q3/C4 and any track the widening pushed into a neighbour. (`--exit-code-violations` also makes the command in Step 1 exit non-zero, so it can gate a script directly.)
 
-- [ ] **Step 3: Fix each violation in KiCad and re-run until the count is zero**
+- [x] **Step 3: Fix each violation in KiCad and re-run until the count is zero**
 
 Fix by moving the *smaller* part, never J2 — its position is pinned by the arc (spec §5). Re-run Steps 1–2 after each pass.
 
 Expected on the final run: `0`.
 
-- [ ] **Step 4: Confirm the board checker is still green**
+- [x] **Step 4: Confirm the board checker is still green**
 
 Run: `python hardware/kicad/check_board.py --only board`
 
 Expected: `0 failure(s)`. If a DRC fix moved C1, Q3 or J2, update `EXPECT` to the as-placed coordinates and say so in the commit message.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 **`drc.json` is not committed** — `hardware/kicad/.gitignore:1` ignores it, and it has never been tracked. That is the repo's existing decision and this plan keeps it: the gate is the violation count you just read, not a committed report. Quote that count in the commit message instead.
 
@@ -613,13 +613,13 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Consumes: the as-placed coordinates from Tasks 2–4.
 - Produces: `check_board.py --only script` green.
 
-- [ ] **Step 1: Run the script group to confirm it is red**
+- [x] **Step 1: Run the script group to confirm it is red**
 
 Run: `python hardware/kicad/check_board.py --only script`
 
 Expected: exit 1 with four failures — the script still names the PicoBlade footprint and rev A's positions for J2, C1 and Q3.
 
-- [ ] **Step 2: Update the component and position tables**
+- [x] **Step 2: Update the component and position tables**
 
 In `hardware/kicad/build_board.py`:
 
@@ -649,7 +649,7 @@ END_R  = 17.5
 
 `SAG` is derived from those two and needs no edit.
 
-- [ ] **Step 3: Add the banner the spec's risk section asks for**
+- [x] **Step 3: Add the banner the spec's risk section asks for**
 
 Immediately after the module docstring's closing `"""`:
 
@@ -662,13 +662,13 @@ Immediately after the module docstring's closing `"""`:
 # fails if they drift. To seed a *new* board, copy this script and change OUT.
 ```
 
-- [ ] **Step 4: Run the script group to verify it passes**
+- [x] **Step 4: Run the script group to verify it passes**
 
 Run: `python hardware/kicad/check_board.py --only script`
 
 Expected: `0 failure(s)`, exit 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add hardware/kicad/build_board.py
@@ -693,7 +693,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Consumes: the board from Task 4.
 - Produces: `check_board.py` fully green across all three groups.
 
-- [ ] **Step 1: Flip the docs expectation and watch it go red**
+- [x] **Step 1: Flip the docs expectation and watch it go red**
 
 In `hardware/kicad/check_board.py`:
 
@@ -709,7 +709,7 @@ FAIL  footprints-and-pins.md names the J2 footprint
 FAIL  bom.csv J2 row mentions ZH 1.5mm
 ```
 
-- [ ] **Step 2: Update the BOM rows**
+- [x] **Step 2: Update the BOM rows**
 
 `hardware/bom.csv` line 13 becomes:
 
@@ -725,7 +725,7 @@ The Notes field must not contain a comma — this file is plain unquoted CSV (`D
 JST ZH S7B-ZR-SM4A-TF 7-pin side entry,J2,ZH-7-SIDE,
 ```
 
-- [ ] **Step 3: Update the footprint table**
+- [x] **Step 3: Update the footprint table**
 
 `hardware/kicad/footprints-and-pins.md` line 19 becomes:
 
@@ -733,13 +733,13 @@ JST ZH S7B-ZR-SM4A-TF 7-pin side entry,J2,ZH-7-SIDE,
 | J2 | JST ZH 1.5 7-pin side entry | `Connector_JST:JST_ZH_S7B-ZR-SM4A-TF_1x07-1MP_P1.50mm_Horizontal` |
 ```
 
-- [ ] **Step 4: Run the docs group to verify it passes**
+- [x] **Step 4: Run the docs group to verify it passes**
 
 Run: `python hardware/kicad/check_board.py --only docs`
 
 Expected: `0 failure(s)`, exit 0.
 
-- [ ] **Step 5: Update the prose the checker cannot see**
+- [x] **Step 5: Update the prose the checker cannot see**
 
 - `hardware/schematic-nets.md` §2.5: change the heading line **`**J2 = PicoBlade 7-pos (6 populated, pin 7 = NC):**`** to name the ZH part, and add below the table: the physical 1..7 order is resolved by the footprint as of rev B — pad 1 is the pad nearest the board's bottom edge, and the harness's empty position lands on pad 7 (or the reverse, per Task 2 Step 1's finding).
 - `docs/superpowers/specs/2026-09-21-rev-b-connector-design.md` §4 item 5 ("Outline unchanged: 63.3 × 31.3") and the §3.2 sentence reasoning from "a board that ends at 63.3": both are superseded by the 2026-09-22 shrink to 62.3 × 30.3. Record the reason — rev A fits the housing too tightly — rather than silently editing the numbers.
@@ -750,13 +750,13 @@ Expected: `0 failure(s)`, exit 0.
 - `hardware/calcs.md` lines 30–32: "rev B should fix the trace width rather than spend the margin" becomes: rev B *did* widen the power nets to 0.5 mm, moving the track limit to ~1.5 A, and the binding constraint is now J2's 1.0 A/contact and the unmeasured `+4V7` rail — **not** a licence to raise the cap.
 - `hardware/calcs.md` "As-built trace widths (rev A)" section: retitle to make clear it describes rev A, record that *every* routed segment measured 0.20 mm (not just the nets the class named), and add the rev B row.
 
-- [ ] **Step 6: Run everything and verify all three groups pass**
+- [x] **Step 6: Run everything and verify all three groups pass**
 
 Run: `python hardware/kicad/check_board.py`
 
 Expected: `0 failure(s)`, exit 0.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add hardware/bom.csv hardware/kicad/bom-jlc.csv hardware/kicad/footprints-and-pins.md hardware/schematic-nets.md hardware/calcs.md docs/research/teardown-reference.md docs/superpowers/research/phase0-measurements.md hardware/kicad/check_board.py
@@ -782,7 +782,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Consumes: the board from Task 6.
 - Produces: a fab package that matches the committed `.kicad_pcb`.
 
-- [ ] **Step 1: Regenerate the raw position file**
+- [x] **Step 1: Regenerate the raw position file**
 
 `pos-raw.csv` is the direct `kicad-cli` export (`Ref,Val,Package,PosX,PosY,Rot,Side`):
 
@@ -790,7 +790,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 "/c/Program Files/KiCad/10.0/bin/kicad-cli.exe" pcb export pos --format csv --units mm --side both --output hardware/kicad/pos-raw.csv hardware/kicad/lumary-brain.kicad_pcb
 ```
 
-- [ ] **Step 2: Derive the JLC CPL from it, and confirm J2 and C1 moved**
+- [x] **Step 2: Derive the JLC CPL from it, and confirm J2 and C1 moved**
 
 `cpl.csv` is not a `kicad-cli` output — it is `pos-raw.csv` rewritten into JLC's `Designator,Mid X,Mid Y,Layer,Rotation` shape, with `mm` suffixes and a capitalised side:
 
@@ -811,7 +811,7 @@ grep -E "^(J2|C1)," hardware/kicad/cpl.csv
 
 Expected: `J2,174.2574mm,-96.7500mm,Top,…` and `C1,169.0074mm,-101.9500mm,Top,90.000000`, matching Task 2's table. J2's rotation reads `90.000000`. If the X values still read `177.1074` / `171.0074`, the export ran against a stale file.
 
-- [ ] **Step 3: Regenerate the gerbers and drill files**
+- [x] **Step 3: Regenerate the gerbers and drill files**
 
 Regenerate **into the tracked directory**, not a temp one, then pack that same directory into the zip:
 
@@ -840,7 +840,7 @@ Print the F.Cu + F.Paste + F.SilkS layers at exactly 1:1 (**File → Plot → PD
 
 This is the gate that rev A failed. Do not order boards until it passes.
 
-- [ ] **Step 5: Final full verification**
+- [x] **Step 5: Final full verification**
 
 ```bash
 python hardware/kicad/check_board.py && "/c/Program Files/KiCad/10.0/bin/kicad-cli.exe" pcb drc --format json --output hardware/kicad/drc.json --severity-error --refill-zones hardware/kicad/lumary-brain.kicad_pcb && python -c "import json;d=json.load(open('hardware/kicad/drc.json'));print('violations:',sum(len(d.get(k,[])) for k in ('violations','unconnected_items')))"
@@ -848,7 +848,7 @@ python hardware/kicad/check_board.py && "/c/Program Files/KiCad/10.0/bin/kicad-c
 
 Expected: `0 failure(s)` from the checker and `violations: 0`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A hardware/kicad/gerbers/ && git add hardware/kicad/cpl.csv hardware/kicad/pos-raw.csv hardware/kicad/lumary-brain-gerbers.zip
@@ -875,6 +875,35 @@ Spec §4 asks for five things before gerbers are released:
 | 4. 1:1 print against the physical connector | Task 7 Step 4 |
 | 5. Outline ~~unchanged~~ — now 62.3 × 30.3 with R 17.5 ends | Task 1's outline check, which runs on every invocation. The spec's "unchanged" wording is superseded; see the Global Constraints note and Task 6. |
 
+## Order status
+
+**Ordered 2026-11-13** from JLCPCB, fully assembled: 5 boards, 2-layer, 1.6 mm, HASL, Standard
+PCBA, top side, JLC edge rails (snap off, as rev A), DHL DDP, about $146. Est. ship date 2026-11-19.
+
+What changed on the way to the order, beyond this plan:
+
+- **U1 -> ESP32-H2-MINI-1-H4S (C47967030).** The -N4 (C18203134) is discontinued. A JLC pre-order
+  for the H4S was cancelled; by 2026-11-13 JLC had it in stock. Chip rev v1.2, 105 C rated, same
+  footprint, 4 MB flash.
+- **SW1/SW2 -> Panasonic EVQPUC02K (C79174).** JLC had 2 of rev A's EVQPUA02K against 10 needed.
+- **J2 rotation is 270 in `cpl.csv`, not KiCad's 90.** JLC's ZH footprint is drawn 180 deg from
+  KiCad's: at 90 the preview put the leads toward the edge and pin 1 at the top. At 270 the leads
+  are inboard, the opening faces the curved edge and pin 1 is the bottom pad. The `.kicad_pcb` is
+  unchanged.
+- **JLC's 3D preview draws J1 ~2 mm off and J3's USB-C pins slightly low.** These are model
+  offsets, not placement: both lines are byte-identical to rev A's CPL, which assembled correctly.
+  Do not "correct" them in the preview -- that moves the real part off its pads.
+- An order placed through the JLCONE app showed parts off their pads and was cancelled; order on
+  the website.
+
 ## After fab
+
+First checks on arrival, before the bench checklist:
+
+1. The stock CN1 harness plugs straight into J2 -- no pigtail.
+2. Firmware flashes over USB and boots on the H4S. Nothing has run on ESP32-H2 v1.2 silicon yet.
+3. Rails snapped off, the board fits the housing more easily than rev A (outline is 0.5 mm smaller
+   per side).
+
 
 Out of scope for this plan, from spec §4: bring the first rev B board up on the bench against a real harness with **no pigtail**, and re-run the bench checklist in `docs/superpowers/plans/2026-08-18-bench-verification.md`.
