@@ -30,3 +30,20 @@ applies equally to J2.
 **Rev B workaround:** re-pin the harness on every rev B board, bottom pad up: black (V+), white
 (CW-), yellow (WW-), red (5V+), green (GND), blue (DIM), top pad empty. Verified on the bench.
 This makes the harness incompatible with the stock Tuya board.
+
+## 2. Downlight flashes on for ~1 s at mains power-up (minor, check first)
+
+**Found:** 2026-11-25, rev B bench, cold boot from the driver with no USB. Board then joins and
+behaves normally.
+
+**Context:** R3/R4 (100 k) hold the CW/WW MOSFET gates low, and `led_driver_init()` zeroes the
+white duty as the first thing `setup()` does, so only the ROM/bootloader window (~0.3 s by the
+comment in `src/main.cpp`) should be ungated. ~1 s observed (by eye) is longer than that.
+
+**Hypothesis (unmeasured):** during reset the ESP32-H2's GPIO4/GPIO5 sit on their weak internal
+pull-ups, and against a 100 k pulldown the gate settles around 2 V -- enough to partly turn on a
+logic-level N-FET and let the L-SD8E1 drive the string.
+
+**To check:** scope Q1/Q2 gate at power-up on a rev B board. **Likely rev C change:** R3/R4
+100 k -> 10 k (gate ~0.3 V during reset; GPIO drive through R1/R2 100 R is unaffected). Confirm
+whether rev A fixtures did the same before treating it as a regression.
